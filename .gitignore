@@ -1,0 +1,13 @@
+.venv/
+node_modules/
+apps/web/node_modules/
+apps/web/dist/
+*.tsbuildinfo
+.learnfast-data/
+.env
+.env.local
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.DS_Store
