@@ -12,6 +12,7 @@ def health() -> dict:
     with get_db() as conn:
         space_count = conn.execute("SELECT COUNT(*) AS count FROM spaces").fetchone()["count"]
         source_count = conn.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"]
+        note_count = conn.execute("SELECT COUNT(*) AS count FROM notes").fetchone()["count"]
     return {
         "status": "ok",
         "version": __version__,
@@ -21,5 +22,6 @@ def health() -> dict:
         "counts": {
             "spaces": space_count,
             "sources": source_count,
+            "notes": note_count,
         },
     }

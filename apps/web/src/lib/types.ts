@@ -7,6 +7,7 @@ export type Space = {
   updated_at: string;
   counts: {
     sources: number;
+    notes: number;
   };
 };
 
@@ -58,6 +59,7 @@ export type SourceChunk = {
 
 export type Citation = {
   chunk_id: string;
+  source_type: "source" | "note";
   source_id: string;
   source_title: string;
   version_id: string;
@@ -78,6 +80,7 @@ export type RetrievalTrace = {
   source_ids?: string[] | null;
   context_count: number;
   insufficient_reason?: string | null;
+  memory_context?: MemoryContext[];
 };
 
 export type ChatMessage = {
@@ -125,10 +128,92 @@ export type Note = {
   title: string;
   markdown: string;
   tags: string[];
-  status: string;
+  status: "draft" | "saved" | "fragment";
   source_type?: string | null;
   source_message_id?: string | null;
+  chunk_count: number;
   created_at: string;
+  updated_at: string;
+};
+
+export type SearchResult = {
+  chunk_id: string;
+  source_type: "source" | "note";
+  source_id: string;
+  source_title: string;
+  version_id: string;
+  ordinal: number;
+  heading_path: string[];
+  locator: string;
+  quote_snapshot: string;
+  score: number;
+};
+
+export type MemoryLayerId =
+  | "space_profile"
+  | "source_semantic"
+  | "user_note"
+  | "dialogue_episodic"
+  | "learning_ability"
+  | "preference"
+  | "plan_progress";
+
+export type MemorySourceType = "chat" | "note" | "source" | "plan" | "manual";
+
+export type MemoryLayer = {
+  id: MemoryLayerId;
+  label: string;
+  description: string;
+};
+
+export type MemorySettings = {
+  space_id: string;
+  auto_extract_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemoryCandidate = {
+  id: string;
+  space_id: string;
+  layer: MemoryLayerId;
+  content: string;
+  source_type: MemorySourceType;
+  source_id?: string | null;
+  source_title: string;
+  source_excerpt: string;
+  confidence: number;
+  impact: "low" | "medium" | "high";
+  status: "pending" | "accepted" | "ignored";
+  accepted_memory_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemoryItem = {
+  id: string;
+  space_id: string;
+  layer: MemoryLayerId;
+  content: string;
+  source_type: MemorySourceType;
+  source_id?: string | null;
+  source_title: string;
+  source_excerpt: string;
+  priority: number;
+  status: "active" | "deleted";
+  candidate_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemoryContext = {
+  id: string;
+  layer: MemoryLayerId;
+  content: string;
+  source_type: MemorySourceType;
+  source_id?: string | null;
+  source_title: string;
+  priority: number;
   updated_at: string;
 };
 
@@ -168,5 +253,6 @@ export type Health = {
   counts: {
     spaces: number;
     sources: number;
+    notes: number;
   };
 };

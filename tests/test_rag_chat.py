@@ -22,6 +22,11 @@ def main() -> int:
             submit_chat_feedback,
         )
         from learnfast.services.indexer import index_source_markdown, search_chunks
+        from learnfast.services.memory_service import (
+            active_memory_context,
+            create_memory,
+            delete_memory,
+        )
         from learnfast.services.rag_chat import retrieve_for_question, stream_answer
 
         init_db()
@@ -108,6 +113,33 @@ SQL joins combine rows across tables with matching keys.
         answer = "".join(stream_answer("What are pandas cleaning steps?", citations, trace))
         assert "Pandas Notes" in answer
         assert "[1]" in answer
+        memory = create_memory(
+            space_id=space_id,
+            layer="learning_ability",
+            content="用户需要重点复习 merge 与 concat 的差异。",
+            source_type="manual",
+            source_title="手动记忆",
+            priority=2,
+        )
+        personalized = "".join(
+            stream_answer(
+                "What are pandas cleaning steps?",
+                citations,
+                trace,
+                active_memory_context(space_id),
+            )
+        )
+        assert "merge 与 concat" in personalized
+        delete_memory(space_id, memory["id"])
+        forgotten = "".join(
+            stream_answer(
+                "What are pandas cleaning steps?",
+                citations,
+                trace,
+                active_memory_context(space_id),
+            )
+        )
+        assert "merge 与 concat" not in forgotten
 
         user_message_id = "chat-user"
         assistant_message_id = "chat-assistant"
@@ -162,6 +194,11 @@ SQL joins combine rows across tables with matching keys.
         note = save_chat_answer_as_note(space_id, assistant_message_id, SaveNoteIn())
         assert "原问题" in note["markdown"]
         assert "引用" in note["markdown"]
+        note_search_results = search_chunks(space_id, "pandas cleaning original question")
+        assert any(
+            result.source_type == "note" and result.source_id == note["id"]
+            for result in note_search_results
+        ), "saved chat answer note should be searchable"
         feedback = submit_chat_feedback(
             space_id,
             assistant_message_id,

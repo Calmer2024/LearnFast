@@ -2,8 +2,15 @@ import type {
   ChatMessage,
   ChatStreamEvent,
   Health,
+  MemoryCandidate,
+  MemoryItem,
+  MemoryLayer,
+  MemoryLayerId,
+  MemorySettings,
+  MemorySourceType,
   ModelProvider,
   Note,
+  SearchResult,
   Source,
   SourceChunk,
   Space,
@@ -77,7 +84,7 @@ export const api = {
     }),
 
   listSources: (spaceId: string) => request<Source[]>(`/spaces/${spaceId}/sources`),
-  uploadSources: (spaceId: string, files: FileList) => {
+  uploadSources: (spaceId: string, files: FileList | File[]) => {
     const formData = new FormData();
     Array.from(files).forEach((file) => formData.append("files", file));
     return request<Source[]>(`/spaces/${spaceId}/sources/files`, {
@@ -110,7 +117,7 @@ export const api = {
   getChunks: (spaceId: string, sourceId: string) =>
     request<SourceChunk[]>(`/spaces/${spaceId}/sources/${sourceId}/chunks`),
   search: (spaceId: string, query: string) =>
-    request<{ query: string; results: unknown[] }>(
+    request<{ query: string; results: SearchResult[] }>(
       `/spaces/${spaceId}/search?q=${encodeURIComponent(query)}`,
     ),
 
@@ -160,6 +167,60 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  listNotes: (spaceId: string, params: { q?: string; tag?: string } = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.q) searchParams.set("q", params.q);
+    if (params.tag) searchParams.set("tag", params.tag);
+    const suffix = searchParams.toString();
+    return request<Note[]>(`/spaces/${spaceId}/notes${suffix ? `?${suffix}` : ""}`);
+  },
+  createNote: (
+    spaceId: string,
+    payload: {
+      title?: string;
+      markdown: string;
+      tags?: string[];
+      status?: "draft" | "saved" | "fragment";
+    },
+  ) =>
+    request<Note>(`/spaces/${spaceId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  uploadNotes: (spaceId: string, files: FileList | File[]) => {
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append("files", file));
+    return request<Note[]>(`/spaces/${spaceId}/notes/files`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+  updateNote: (
+    spaceId: string,
+    noteId: string,
+    payload: Partial<{
+      title: string;
+      markdown: string;
+      tags: string[];
+      status: "draft" | "saved" | "fragment";
+    }>,
+  ) =>
+    request<Note>(`/spaces/${spaceId}/notes/${noteId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteNote: (spaceId: string, noteId: string, deleteAssociatedMemories: boolean) =>
+    request<{
+      deleted: boolean;
+      id: string;
+      delete_associated_memories: boolean;
+      memory_delete_result?: { deleted_memories: number; ignored_candidates: number } | null;
+    }>(
+      `/spaces/${spaceId}/notes/${noteId}?delete_associated_memories=${deleteAssociatedMemories ? "true" : "false"}`,
+      {
+        method: "DELETE",
+      },
+    ),
   submitChatFeedback: (
     spaceId: string,
     messageId: string,
@@ -172,6 +233,91 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+
+  listMemoryLayers: () => request<MemoryLayer[]>("/memory-layers"),
+  getMemorySettings: (spaceId: string) =>
+    request<MemorySettings>(`/spaces/${spaceId}/memory-settings`),
+  updateMemorySettings: (spaceId: string, payload: { auto_extract_enabled: boolean }) =>
+    request<MemorySettings>(`/spaces/${spaceId}/memory-settings`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  listMemoryCandidates: (
+    spaceId: string,
+    params: { status?: "pending" | "accepted" | "ignored" | "all"; layer?: MemoryLayerId | "" } = {},
+  ) => {
+    const searchParams = new URLSearchParams();
+    searchParams.set("status", params.status ?? "pending");
+    if (params.layer) searchParams.set("layer", params.layer);
+    return request<MemoryCandidate[]>(
+      `/spaces/${spaceId}/memory-candidates?${searchParams.toString()}`,
+    );
+  },
+  updateMemoryCandidate: (
+    spaceId: string,
+    candidateId: string,
+    payload: Partial<{
+      content: string;
+      layer: MemoryLayerId;
+      impact: "low" | "medium" | "high";
+    }>,
+  ) =>
+    request<MemoryCandidate>(`/spaces/${spaceId}/memory-candidates/${candidateId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  confirmMemoryCandidate: (
+    spaceId: string,
+    candidateId: string,
+    payload: Partial<{ content: string; layer: MemoryLayerId }> = {},
+  ) =>
+    request<MemoryItem>(`/spaces/${spaceId}/memory-candidates/${candidateId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  ignoreMemoryCandidate: (spaceId: string, candidateId: string) =>
+    request<MemoryCandidate>(`/spaces/${spaceId}/memory-candidates/${candidateId}/ignore`, {
+      method: "POST",
+    }),
+  listMemories: (
+    spaceId: string,
+    params: { layer?: MemoryLayerId | ""; include_deleted?: boolean } = {},
+  ) => {
+    const searchParams = new URLSearchParams();
+    if (params.layer) searchParams.set("layer", params.layer);
+    if (params.include_deleted) searchParams.set("include_deleted", "true");
+    const suffix = searchParams.toString();
+    return request<MemoryItem[]>(`/spaces/${spaceId}/memories${suffix ? `?${suffix}` : ""}`);
+  },
+  createMemory: (
+    spaceId: string,
+    payload: {
+      layer: MemoryLayerId;
+      content: string;
+      source_type?: MemorySourceType;
+      source_id?: string | null;
+      source_title?: string;
+      source_excerpt?: string;
+      priority?: number;
+    },
+  ) =>
+    request<MemoryItem>(`/spaces/${spaceId}/memories`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMemory: (
+    spaceId: string,
+    memoryId: string,
+    payload: Partial<{ content: string; layer: MemoryLayerId; priority: number }>,
+  ) =>
+    request<MemoryItem>(`/spaces/${spaceId}/memories/${memoryId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteMemory: (spaceId: string, memoryId: string) =>
+    request<{ deleted: boolean; id: string }>(`/spaces/${spaceId}/memories/${memoryId}`, {
+      method: "DELETE",
+    }),
 
   listSystemLogs: (payload: { spaceId?: string; afterId?: number; limit?: number } = {}) => {
     const params = new URLSearchParams();

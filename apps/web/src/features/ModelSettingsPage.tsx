@@ -1,6 +1,7 @@
 import { FloppyDisk, Plug } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { ComboboxInput } from "../components/ComboboxInput";
 import { StatusBadge } from "../components/StatusBadge";
 import { api } from "../lib/api";
 import type { ModelProvider } from "../lib/types";
@@ -208,16 +209,11 @@ function ProviderPanel({
         </label>
         <label>
           {modelLabel}
-          <input
-            list={`${provider.id}-models`}
+          <ComboboxInput
             value={modelValue}
-            onChange={(event) => onModelChange(event.target.value)}
+            options={modelOptions}
+            onChange={onModelChange}
           />
-          <datalist id={`${provider.id}-models`}>
-            {modelOptions.map((model) => (
-              <option key={model} value={model} />
-            ))}
-          </datalist>
         </label>
       </div>
       <div className="card-actions">

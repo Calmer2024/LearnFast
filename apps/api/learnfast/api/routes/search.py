@@ -24,7 +24,7 @@ def search_space(
         details={
             "query_preview": q[:160],
             "limit": limit,
-            "source_scope": source_id or "all_ready_sources",
+            "source_scope": source_id or "all_ready_sources_and_notes",
             "result_count": len(results),
         },
     )

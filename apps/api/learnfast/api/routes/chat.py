@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from learnfast.api.routes.spaces import require_space
+from learnfast.core.limits import MAX_NOTE_SIZE_BYTES, MAX_NOTE_SIZE_MB
 from learnfast.core.errors import bad_request, not_found
 from learnfast.infrastructure.database import get_db, row_to_dict, utc_now
+from learnfast.services.indexer import delete_note_index, index_note_markdown, list_note_chunks
+from learnfast.services.memory_service import (
+    active_memory_context,
+    delete_memories_for_source,
+    extract_memory_candidates_from_chat,
+    extract_memory_candidates_from_note,
+)
 from learnfast.services.rag_chat import (
     CitationCandidate,
     citation_response,
@@ -31,6 +40,20 @@ class ChatStreamIn(BaseModel):
 
 class SaveNoteIn(BaseModel):
     title: str | None = Field(default=None, max_length=160)
+
+
+class NoteCreateIn(BaseModel):
+    title: str | None = Field(default=None, max_length=160)
+    markdown: str = Field(min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    status: str = Field(default="draft", pattern="^(draft|saved|fragment)$")
+
+
+class NoteUpdateIn(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    markdown: str | None = Field(default=None, min_length=1)
+    tags: list[str] | None = None
+    status: str | None = Field(default=None, pattern="^(draft|saved|fragment)$")
 
 
 class FeedbackIn(BaseModel):
@@ -94,6 +117,7 @@ def save_chat_answer_as_note(space_id: str, message_id: str, payload: SaveNoteIn
     citations = _list_citations(message_id)
     title = (payload.title or _note_title(parent, message)).strip()
     markdown = _note_markdown(title, parent, message, citations)
+    _validate_note_markdown(markdown)
     now = utc_now()
     note_id = str(uuid4())
     with get_db() as conn:
@@ -107,6 +131,9 @@ def save_chat_answer_as_note(space_id: str, message_id: str, payload: SaveNoteIn
             """,
             (note_id, space_id, title, markdown, message_id, now, now),
         )
+    note = _get_note(space_id, note_id)
+    _reindex_note(note)
+    memory_candidates = extract_memory_candidates_from_note(space_id, note)
     log_event(
         "note",
         "AI 回答已保存为笔记",
@@ -116,9 +143,11 @@ def save_chat_answer_as_note(space_id: str, message_id: str, payload: SaveNoteIn
             "note_id": note_id,
             "title": title,
             "citation_count": len(citations),
+            "chunk_count": note.get("chunk_count"),
+            "memory_candidate_count": len(memory_candidates),
         },
     )
-    return _get_note(space_id, note_id)
+    return note
 
 
 @router.post("/spaces/{space_id}/chat/{message_id}/feedback")
@@ -162,14 +191,25 @@ def submit_chat_feedback(space_id: str, message_id: str, payload: FeedbackIn) ->
 
 
 @router.get("/spaces/{space_id}/notes")
-def list_notes(space_id: str) -> list[dict]:
+def list_notes(
+    space_id: str,
+    q: str | None = Query(default=None, min_length=1),
+    tag: str | None = Query(default=None, min_length=1),
+) -> list[dict]:
     require_space(space_id)
+    query = q.strip().lower() if isinstance(q, str) else ""
+    tag_value = tag.strip().lower() if isinstance(tag, str) else ""
     with get_db() as conn:
         rows = [
             dict(row)
             for row in conn.execute(
                 """
-                SELECT *
+                SELECT notes.*,
+                       (
+                           SELECT COUNT(*)
+                           FROM note_chunks
+                           WHERE note_chunks.note_id = notes.id
+                       ) AS chunk_count
                 FROM notes
                 WHERE space_id = ?
                 ORDER BY updated_at DESC
@@ -177,7 +217,240 @@ def list_notes(space_id: str) -> list[dict]:
                 (space_id,),
             ).fetchall()
         ]
-    return [_note_response(row) for row in rows]
+    notes = [_note_response(row) for row in rows]
+    if query:
+        notes = [
+            note
+            for note in notes
+            if query in note["title"].lower()
+            or query in note["markdown"].lower()
+            or any(query in tag_item.lower() for tag_item in note["tags"])
+        ]
+    if tag_value:
+        notes = [
+            note
+            for note in notes
+            if any(tag_item.lower() == tag_value for tag_item in note["tags"])
+        ]
+    return notes
+
+
+@router.post("/spaces/{space_id}/notes")
+def create_note(space_id: str, payload: NoteCreateIn) -> dict:
+    require_space(space_id)
+    markdown = payload.markdown.strip()
+    _validate_note_markdown(markdown)
+    tags = _normalize_tags(payload.tags)
+    title = (payload.title or _title_from_markdown(markdown, payload.status)).strip()
+    note = _insert_note(
+        space_id=space_id,
+        title=title,
+        markdown=markdown,
+        tags=tags,
+        status=payload.status,
+        source_type="manual",
+    )
+    log_event(
+        "note",
+        "笔记已创建并写入索引",
+        space_id=space_id,
+        details={
+            "note_id": note["id"],
+            "title": title,
+            "status": payload.status,
+            "tags": tags,
+            "chunk_count": note.get("chunk_count"),
+        },
+    )
+    return note
+
+
+@router.post("/spaces/{space_id}/notes/files")
+async def upload_note_files(
+    space_id: str,
+    files: list[UploadFile] = File(...),
+) -> list[dict]:
+    require_space(space_id)
+    if not files:
+        raise bad_request("No note files were uploaded.")
+    if len(files) > 20:
+        raise bad_request("Upload at most 20 note files at once.")
+
+    created: list[dict] = []
+    for upload in files:
+        filename = upload.filename or "note.md"
+        suffix = Path(filename).suffix.lower()
+        if suffix != ".md":
+            raise bad_request("Only .md note uploads are supported for now.")
+        content = await upload.read()
+        if len(content) > MAX_NOTE_SIZE_BYTES:
+            raise bad_request(f"{filename} exceeds the {MAX_NOTE_SIZE_MB} MB note limit.")
+        try:
+            markdown = content.decode("utf-8").strip()
+        except UnicodeDecodeError as exc:
+            raise bad_request(f"{filename} must be UTF-8 encoded Markdown.") from exc
+        _validate_note_markdown(markdown)
+        title = Path(filename).stem.strip()[:160] or _title_from_markdown(markdown, "saved")
+        note = _insert_note(
+            space_id=space_id,
+            title=title,
+            markdown=markdown,
+            tags=["上传"],
+            status="saved",
+            source_type="upload",
+        )
+        log_event(
+            "note",
+            "Markdown 笔记已上传并写入索引",
+            space_id=space_id,
+            details={
+                "note_id": note["id"],
+                "title": title,
+                "filename": filename,
+                "chunk_count": note.get("chunk_count"),
+            },
+        )
+        created.append(note)
+    return created
+
+
+def _insert_note(
+    *,
+    space_id: str,
+    title: str,
+    markdown: str,
+    tags: list[str],
+    status: str,
+    source_type: str,
+    source_message_id: str | None = None,
+) -> dict:
+    now = utc_now()
+    note_id = str(uuid4())
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO notes (
+                id, space_id, title, markdown, tags_json, status,
+                source_type, source_message_id, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                note_id,
+                space_id,
+                title,
+                markdown,
+                json.dumps(tags, ensure_ascii=False),
+                status,
+                source_type,
+                source_message_id,
+                now,
+                now,
+            ),
+        )
+    note = _get_note(space_id, note_id)
+    _reindex_note(note)
+    extract_memory_candidates_from_note(space_id, note)
+    return note
+
+
+@router.get("/spaces/{space_id}/notes/{note_id}")
+def get_note(space_id: str, note_id: str) -> dict:
+    require_space(space_id)
+    return _get_note(space_id, note_id)
+
+
+@router.get("/spaces/{space_id}/notes/{note_id}/chunks")
+def get_note_chunks(space_id: str, note_id: str) -> list[dict]:
+    require_space(space_id)
+    _get_note(space_id, note_id)
+    return list_note_chunks(space_id, note_id)
+
+
+@router.patch("/spaces/{space_id}/notes/{note_id}")
+def update_note(space_id: str, note_id: str, payload: NoteUpdateIn) -> dict:
+    require_space(space_id)
+    current = _get_note(space_id, note_id)
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise bad_request("No fields to update.")
+
+    title = values.get("title") or current["title"]
+    markdown = values.get("markdown") or current["markdown"]
+    status = values.get("status") or current["status"]
+    tags = _normalize_tags(values["tags"] or []) if "tags" in values else current["tags"]
+    markdown = markdown.strip()
+    _validate_note_markdown(markdown)
+
+    now = utc_now()
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE notes
+            SET title = ?, markdown = ?, tags_json = ?, status = ?, updated_at = ?
+            WHERE id = ? AND space_id = ?
+            """,
+            (
+                title.strip(),
+                markdown,
+                json.dumps(tags, ensure_ascii=False),
+                status,
+                now,
+                note_id,
+                space_id,
+            ),
+        )
+    note = _get_note(space_id, note_id)
+    _reindex_note(note)
+    memory_candidates = extract_memory_candidates_from_note(space_id, note)
+    log_event(
+        "note",
+        "笔记已更新并刷新索引",
+        space_id=space_id,
+        details={
+            "note_id": note_id,
+            "title": note["title"],
+            "status": note["status"],
+            "tags": note["tags"],
+            "chunk_count": note.get("chunk_count"),
+            "memory_candidate_count": len(memory_candidates),
+        },
+    )
+    return note
+
+
+@router.delete("/spaces/{space_id}/notes/{note_id}")
+def delete_note(
+    space_id: str,
+    note_id: str,
+    delete_associated_memories: bool = Query(default=False),
+) -> dict:
+    require_space(space_id)
+    note = _get_note(space_id, note_id)
+    delete_note_index(note_id)
+    memory_delete_result = None
+    if delete_associated_memories:
+        memory_delete_result = delete_memories_for_source(space_id, "note", note_id)
+    with get_db() as conn:
+        conn.execute("DELETE FROM notes WHERE id = ? AND space_id = ?", (note_id, space_id))
+    log_event(
+        "note",
+        "笔记已删除，相关索引不再参与新检索",
+        level="warn",
+        space_id=space_id,
+        details={
+            "note_id": note_id,
+            "title": note["title"],
+            "delete_associated_memories": delete_associated_memories,
+            "memory_delete_result": memory_delete_result,
+        },
+    )
+    return {
+        "deleted": True,
+        "id": note_id,
+        "delete_associated_memories": delete_associated_memories,
+        "memory_delete_result": memory_delete_result,
+    }
 
 
 def _chat_events(
@@ -252,6 +525,8 @@ def _chat_events(
         )
         citation_payload = [citation_response(citation) for citation in citations]
         trace_payload = trace_response(trace)
+        memories = active_memory_context(space_id)
+        trace_payload["memory_context"] = memories
         log_event(
             "rag",
             "检索完成，已构建回答上下文",
@@ -263,6 +538,7 @@ def _chat_events(
                 "hyde_used": trace.hyde_used,
                 "source_scope": trace.source_ids or "all_ready_sources",
                 "citation_count": len(citations),
+                "memory_count": len(memories),
                 "insufficient_reason": trace.insufficient_reason,
             },
         )
@@ -276,7 +552,7 @@ def _chat_events(
         )
 
         answer_parts: list[str] = []
-        for chunk in stream_answer(question, citations, trace):
+        for chunk in stream_answer(question, citations, trace, memories):
             answer_parts.append(chunk)
             yield _event(
                 {
@@ -310,6 +586,21 @@ def _chat_events(
             )
             _insert_citations(conn, space_id, assistant_message_id, citations, assistant_created_at)
 
+        assistant_message = {
+            "id": assistant_message_id,
+            "space_id": space_id,
+            "role": "assistant",
+            "content": answer,
+            "parent_message_id": user_message_id,
+            "context_snapshot": trace_payload,
+            "created_at": assistant_created_at,
+            "citations": citation_payload,
+        }
+        memory_candidates = extract_memory_candidates_from_chat(
+            space_id,
+            user_message=user_message,
+            assistant_message=assistant_message,
+        )
         log_event(
             "chat",
             "学习问答回答完成",
@@ -318,22 +609,14 @@ def _chat_events(
                 "assistant_message_id": assistant_message_id,
                 "answer_chars": len(answer),
                 "citation_count": len(citations),
+                "memory_candidate_count": len(memory_candidates),
                 "enhanced_search_used": trace.enhanced_search_used,
             },
         )
         yield _event(
             {
                 "type": "done",
-                "message": {
-                    "id": assistant_message_id,
-                    "space_id": space_id,
-                    "role": "assistant",
-                    "content": answer,
-                    "parent_message_id": user_message_id,
-                    "context_snapshot": trace_payload,
-                    "created_at": assistant_created_at,
-                    "citations": citation_payload,
-                },
+                "message": assistant_message,
                 "search": trace_payload,
                 "citations": citation_payload,
             }
@@ -401,17 +684,18 @@ def _insert_citations(
         conn.execute(
             """
             INSERT INTO citations (
-                id, space_id, message_id, chunk_id, source_id, source_title,
+                id, space_id, message_id, chunk_id, source_type, source_id, source_title,
                 version_id, ordinal, heading_path_json, locator,
                 quote_snapshot, score, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(uuid4()),
                 space_id,
                 message_id,
                 citation.chunk_id,
+                citation.source_type,
                 citation.source_id,
                 citation.source_title,
                 citation.version_id,
@@ -499,6 +783,7 @@ def _message_response(row: dict, citations: list[dict]) -> dict:
 def _citation_row_response(row: dict) -> dict:
     return {
         "chunk_id": row["chunk_id"],
+        "source_type": row.get("source_type") or "source",
         "source_id": row["source_id"],
         "source_title": row["source_title"],
         "version_id": row["version_id"],
@@ -542,9 +827,10 @@ def _note_markdown(
     if citations:
         for index, citation in enumerate(citations, start=1):
             heading = " / ".join(citation["heading_path"]) or "未命名片段"
+            source_label = "笔记" if citation.get("source_type") == "note" else "资料"
             lines.extend(
                 [
-                    f"{index}. {citation['source_title']} · {heading} · {citation['locator']}",
+                    f"{index}. {source_label}：{citation['source_title']} · {heading} · {citation['locator']}",
                     "",
                     f"> {citation['quote_snapshot']}",
                     "",
@@ -555,10 +841,65 @@ def _note_markdown(
     return "\n".join(lines).strip() + "\n"
 
 
+def _validate_note_markdown(markdown: str) -> None:
+    if not markdown.strip():
+        raise bad_request("Note markdown cannot be empty.")
+    if len(markdown.encode("utf-8")) > MAX_NOTE_SIZE_BYTES:
+        raise bad_request(f"Single note cannot exceed {MAX_NOTE_SIZE_MB} MB.")
+
+
+def _normalize_tags(tags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for tag in tags:
+        value = " ".join(str(tag).strip().split())
+        if not value:
+            continue
+        if len(value) > 40:
+            raise bad_request("Each note tag must be at most 40 characters.")
+        if value not in normalized:
+            normalized.append(value)
+        if len(normalized) > 20:
+            raise bad_request("Each note can have at most 20 tags.")
+    return normalized
+
+
+def _title_from_markdown(markdown: str, status: str) -> str:
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            title = stripped.lstrip("#").strip()
+            if title:
+                return title[:160]
+        if stripped:
+            compact = " ".join(stripped.split())
+            prefix = "碎片笔记" if status == "fragment" else "笔记"
+            if len(compact) > 42:
+                compact = f"{compact[:42].rstrip()}..."
+            return f"{prefix}：{compact}"
+    return "未命名笔记"
+
+
+def _reindex_note(note: dict) -> dict:
+    result = index_note_markdown(note["space_id"], note, note["markdown"])
+    note["chunk_count"] = result.chunk_count
+    note["index_version_id"] = result.version_id
+    note["indexed_at"] = result.indexed_at
+    return note
+
+
 def _get_note(space_id: str, note_id: str) -> dict:
     with get_db() as conn:
         row = conn.execute(
-            "SELECT * FROM notes WHERE id = ? AND space_id = ?",
+            """
+            SELECT notes.*,
+                   (
+                       SELECT COUNT(*)
+                       FROM note_chunks
+                       WHERE note_chunks.note_id = notes.id
+                   ) AS chunk_count
+            FROM notes
+            WHERE id = ? AND space_id = ?
+            """,
             (note_id, space_id),
         ).fetchone()
     note = row_to_dict(row)
@@ -577,6 +918,7 @@ def _note_response(row: dict) -> dict:
         "status": row["status"],
         "source_type": row.get("source_type"),
         "source_message_id": row.get("source_message_id"),
+        "chunk_count": row.get("chunk_count", 0),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }

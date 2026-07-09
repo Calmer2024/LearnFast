@@ -6,7 +6,7 @@ import {
   Trash,
   UploadSimple,
 } from "@phosphor-icons/react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { StatusBadge } from "../../components/StatusBadge";
 import { api } from "../../lib/api";
@@ -24,6 +24,7 @@ const processingStatuses = new Set([
 
 export function SourcesSection({ spaceId }: { spaceId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
   const [sources, setSources] = useState<Source[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string>("");
@@ -31,6 +32,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [fileSummary, setFileSummary] = useState("未选择文件");
+  const [fileDragActive, setFileDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,15 +78,15 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
       .catch(() => setChunks([]));
   }, [selected?.id, selected?.status, spaceId]);
 
-  const upload = async () => {
-    const files = fileInputRef.current?.files;
+  const upload = async (incomingFiles?: FileList | File[]) => {
+    const files = incomingFiles ?? fileInputRef.current?.files;
     if (!files || files.length === 0) return;
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
       await api.uploadSources(spaceId, files);
-      setMessage("资料已加入处理队列。");
+      setMessage(`${files.length} 个资料文件已加入处理队列。`);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -97,14 +99,45 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
     }
   };
 
-  const updateFileSummary = () => {
-    const files = fileInputRef.current?.files;
+  const updateFileSummary = (incomingFiles?: FileList | File[]) => {
+    const files = incomingFiles ?? fileInputRef.current?.files;
     if (!files || files.length === 0) {
       setFileSummary("未选择文件");
       return;
     }
     const names = Array.from(files).map((file) => file.name);
     setFileSummary(names.length === 1 ? names[0] : `${names.length} 个文件已选择`);
+  };
+
+  const handleFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setFileDragActive(true);
+  };
+
+  const handleFileDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleFileDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setFileDragActive(false);
+  };
+
+  const handleFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setFileDragActive(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+    updateFileSummary(files);
+    void upload(files);
   };
 
   const importUrl = async (event: FormEvent) => {
@@ -157,7 +190,13 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
         {error && <div className="notice danger">{error}</div>}
         {message && <div className="notice success">{message}</div>}
 
-        <div className="panel">
+        <div
+          className={`panel upload-dropzone ${fileDragActive ? "dragging" : ""}`.trim()}
+          onDragEnter={handleFileDragEnter}
+          onDragLeave={handleFileDragLeave}
+          onDragOver={handleFileDragOver}
+          onDrop={handleFileDrop}
+        >
           <label>
             上传文件
             <input
@@ -165,7 +204,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               ref={fileInputRef}
               type="file"
               multiple
-              onChange={updateFileSummary}
+              onChange={() => updateFileSummary()}
               accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.epub,.csv,.xls,.xlsx"
             />
           </label>
@@ -180,7 +219,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
             </button>
             <span title={fileSummary}>{fileSummary}</span>
           </div>
-          <button className="button" onClick={upload} disabled={loading}>
+          <p className="drop-hint">也可以一次拖拽多个文件到这里上传。</p>
+          <button className="button" onClick={() => upload()} disabled={loading}>
             <UploadSimple size={15} />
             {loading ? "处理中..." : "上传并转换"}
           </button>

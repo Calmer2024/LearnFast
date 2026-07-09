@@ -1,7 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from learnfast.api.routes import chat, health, model_settings, search, sources, spaces, system_logs
+from learnfast.api.routes import (
+    chat,
+    health,
+    memories,
+    model_settings,
+    search,
+    sources,
+    spaces,
+    system_logs,
+)
 from learnfast.core.config import get_settings
 from learnfast.infrastructure.database import init_db
 from learnfast.infrastructure.storage import ensure_data_dirs
@@ -26,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(sources.router, prefix=settings.api_prefix)
     app.include_router(search.router, prefix=settings.api_prefix)
     app.include_router(chat.router, prefix=settings.api_prefix)
+    app.include_router(memories.router, prefix=settings.api_prefix)
     app.include_router(system_logs.router, prefix=settings.api_prefix)
     return app
 

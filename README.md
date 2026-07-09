@@ -1,6 +1,6 @@
 # LearnFast
 
-LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-06：
+LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-08：
 
 - MVP01：React + Python 本地应用骨架、健康检查、本地数据目录和 SQLite 初始化。
 - MVP02：用户自带模型密钥配置、聊天模型和向量模型分开配置、连接测试、默认模型选择。
@@ -8,7 +8,9 @@ LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆�
 - MVP04：资料上传、网页/YouTube 导入、MarkItDown 转 Markdown、状态跟踪、预览、启停、删除和重试。
 - MVP05：Markdown 结构化分块、本地持久化索引、embedding 生成、引用片段定位和空间内检索。
 - MVP06：空间内学习问答、流式 RAG 回答、来源范围选择、MQE/HyDE 增强检索、引用展示、回答保存为笔记和反馈记录。
-- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记和反馈等核心处理日志。
+- MVP07：Markdown 笔记列表、创建/编辑/删除、`.md` 笔记上传、碎片笔记、标签搜索、从回答保存笔记和笔记索引检索。
+- MVP08：记忆候选、长期记忆、七层分类、来源溯源、确认/改写/忽略/删除、空间级自动提取开关和问答记忆上下文。
+- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记、记忆和反馈等核心处理日志。
 
 ## 本地启动
 
@@ -38,7 +40,7 @@ npm --prefix apps\web run dev
 
 默认数据目录为项目根目录下的 `.learnfast-data/`，包含：
 
-- `learnfast.sqlite`：空间、模型配置、资料、任务状态。
+- `learnfast.sqlite`：空间、模型配置、资料、任务状态、笔记、对话、记忆和日志。
 - `raw/`：原始上传资料。
 - `markdown/`：MarkItDown 转换后的 Markdown。
 - `secrets/`：当系统凭据管理器不可用时的本地密钥 fallback。
@@ -101,6 +103,20 @@ python tests\test_indexing_pipeline.py
 ```powershell
 conda activate learn-fast
 python tests\test_rag_chat.py
+```
+
+验证笔记创建、编辑、删除、标签搜索、碎片笔记和笔记索引：
+
+```powershell
+conda activate learn-fast
+python tests\test_notes.py
+```
+
+验证记忆候选、长期记忆、自动提取开关、来源遗忘和问答记忆上下文：
+
+```powershell
+conda activate learn-fast
+python tests\test_memories.py
 ```
 
 验证系统控制台日志写入、空间过滤和增量查询：

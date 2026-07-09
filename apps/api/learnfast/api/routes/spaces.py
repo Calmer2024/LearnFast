@@ -26,7 +26,7 @@ class SpaceUpdate(BaseModel):
 def _space_payload(row: dict, counts: dict | None = None) -> dict:
     return {
         **row,
-        "counts": counts or {"sources": 0},
+        "counts": counts or {"sources": 0, "notes": 0},
     }
 
 
@@ -55,7 +55,19 @@ def list_spaces(include_archived: bool = False) -> list[dict]:
                 "SELECT space_id, COUNT(*) AS count FROM sources GROUP BY space_id"
             ).fetchall()
         }
-    return [_space_payload(row, {"sources": counts.get(row["id"], 0)}) for row in rows]
+        note_counts = {
+            row["space_id"]: row["count"]
+            for row in conn.execute(
+                "SELECT space_id, COUNT(*) AS count FROM notes GROUP BY space_id"
+            ).fetchall()
+        }
+    return [
+        _space_payload(
+            row,
+            {"sources": counts.get(row["id"], 0), "notes": note_counts.get(row["id"], 0)},
+        )
+        for row in rows
+    ]
 
 
 @router.post("")
@@ -90,7 +102,11 @@ def get_space(space_id: str) -> dict:
             "SELECT COUNT(*) AS count FROM sources WHERE space_id = ?",
             (space_id,),
         ).fetchone()["count"]
-    return _space_payload(space, {"sources": source_count})
+        note_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM notes WHERE space_id = ?",
+            (space_id,),
+        ).fetchone()["count"]
+    return _space_payload(space, {"sources": source_count, "notes": note_count})
 
 
 @router.patch("/{space_id}")

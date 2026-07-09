@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { api } from "../../lib/api";
 import type { ChatMessage, ChatStreamEvent, Citation, RetrievalTrace, Source } from "../../lib/types";
 
@@ -177,7 +178,15 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
           {messages.map((message) => (
             <article className={`chat-message ${message.role}`} key={message.id}>
               <div className="message-label">{message.role === "user" ? "你" : "LearnFast"}</div>
-              <div className="message-body">{message.content || "正在生成回答..."}</div>
+              {message.role === "assistant" ? (
+                <MarkdownRenderer
+                  markdown={message.content}
+                  className="message-markdown"
+                  emptyText="正在生成回答..."
+                />
+              ) : (
+                <div className="message-body">{message.content || "正在生成回答..."}</div>
+              )}
               {message.role === "assistant" && (
                 <>
                   <SearchSummary trace={message.context_snapshot} />
@@ -317,7 +326,7 @@ function CitationList({ citations }: { citations: Citation[] }) {
       {citations.slice(0, 6).map((citation, index) => (
         <article className="citation-card" key={`${citation.chunk_id}-${index}`}>
           <div className="chunk-meta">
-            <strong>[{index + 1}] {citation.source_title}</strong>
+            <strong>[{index + 1}] {citation.source_type === "note" ? "笔记" : "资料"}：{citation.source_title}</strong>
             <span>{citation.heading_path.join(" / ") || "未命名片段"}</span>
             <span>{citation.locator}</span>
           </div>

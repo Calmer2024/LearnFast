@@ -29,6 +29,7 @@ class ChatModelConfig:
 @dataclass(frozen=True)
 class CitationCandidate:
     chunk_id: str
+    source_type: str
     source_id: str
     source_title: str
     version_id: str
@@ -82,7 +83,7 @@ def retrieve_for_question(
     insufficient_reason = None
     if not citations:
         insufficient_reason = (
-            "当前资料范围没有检索到可引用片段。请上传资料、等待索引完成，或放宽来源范围。"
+            "当前资料或笔记范围没有检索到可引用片段。请上传资料、创建笔记、等待索引完成，或放宽来源范围。"
         )
 
     trace = RetrievalTrace(
@@ -103,28 +104,36 @@ def stream_answer(
     question: str,
     citations: list[CitationCandidate],
     trace: RetrievalTrace,
+    memory_context: list[dict] | None = None,
 ) -> Iterator[str]:
+    memory_context = memory_context or []
     config = _load_chat_model_config()
     if not citations:
         yield _insufficient_answer(trace)
         return
     if not config:
-        yield from _stream_local_answer(question, citations)
+        yield from _stream_local_answer(question, citations, memory_context)
         return
     try:
-        yield from _stream_remote_answer(config, question, citations)
+        yield from _stream_remote_answer(config, question, citations, memory_context)
     except ChatModelError as exc:
         fallback = (
             f"聊天模型调用失败：{exc}。\n\n"
             "下面先给出基于检索片段的本地摘录式回答，方便你不中断学习：\n\n"
         )
         yield fallback
-        yield from _stream_local_answer(question, citations, include_model_notice=False)
+        yield from _stream_local_answer(
+            question,
+            citations,
+            memory_context,
+            include_model_notice=False,
+        )
 
 
 def citation_response(citation: CitationCandidate) -> dict:
     return {
         "chunk_id": citation.chunk_id,
+        "source_type": citation.source_type,
         "source_id": citation.source_id,
         "source_title": citation.source_title,
         "version_id": citation.version_id,
@@ -211,6 +220,7 @@ def _keywords(text: str) -> list[str]:
 def _citation_candidate(result: ChunkSearchResult) -> CitationCandidate:
     return CitationCandidate(
         chunk_id=result.id,
+        source_type=result.source_type,
         source_id=result.source_id,
         source_title=result.source_title,
         version_id=result.version_id,
@@ -251,19 +261,21 @@ def _stream_remote_answer(
     config: ChatModelConfig,
     question: str,
     citations: list[CitationCandidate],
+    memory_context: list[dict],
 ) -> Iterator[str]:
     messages = [
         {
             "role": "system",
             "content": (
-                "你是 LearnFast 的学习问答助手。只根据提供的学习资料片段回答。"
-                "结论后用 [1]、[2] 这样的编号标注来源；如果资料没有直接支持，明确说资料不足。"
-                "不要把假设检索内容当作来源。"
+                "你是 LearnFast 的学习问答助手。只根据提供的学习资料或笔记片段回答。"
+                "结论后用 [1]、[2] 这样的编号标注来源；如果资料或笔记没有直接支持，明确说资料不足。"
+                "不要把假设检索内容当作来源。长期记忆只用于个性化语气、学习重点和复习建议，"
+                "不能替代资料或笔记引用。"
             ),
         },
         {
             "role": "user",
-            "content": _remote_prompt(question, citations),
+            "content": _remote_prompt(question, citations, memory_context),
         },
     ]
     try:
@@ -305,7 +317,11 @@ def _stream_remote_answer(
         raise ChatModelError(str(exc)) from exc
 
 
-def _remote_prompt(question: str, citations: list[CitationCandidate]) -> str:
+def _remote_prompt(
+    question: str,
+    citations: list[CitationCandidate],
+    memory_context: list[dict],
+) -> str:
     context_lines = []
     for index, citation in enumerate(citations, start=1):
         heading = " / ".join(citation.heading_path) or "未命名片段"
@@ -313,10 +329,12 @@ def _remote_prompt(question: str, citations: list[CitationCandidate]) -> str:
             f"[{index}] {citation.source_title} · {heading} · {citation.locator}\n"
             f"{citation.quote_snapshot}"
         )
+    memory_text = _memory_context_prompt(memory_context)
     return (
         f"问题：{question}\n\n"
-        "可用学习资料片段：\n"
+        "可用学习资料或笔记片段：\n"
         + "\n\n".join(context_lines)
+        + memory_text
         + "\n\n请给出面向学习者的清晰回答，并在使用资料结论时标注引用编号。"
     )
 
@@ -324,14 +342,25 @@ def _remote_prompt(question: str, citations: list[CitationCandidate]) -> str:
 def _stream_local_answer(
     question: str,
     citations: list[CitationCandidate],
+    memory_context: list[dict] | None = None,
     include_model_notice: bool = True,
 ) -> Iterator[str]:
+    memory_context = memory_context or []
     paragraphs: list[str] = []
     if include_model_notice:
         paragraphs.append(
             "未配置可用聊天模型，下面是基于检索片段生成的本地摘录式回答。"
         )
     paragraphs.append(f"针对“{question}”，当前资料中最相关的信息如下：")
+    if memory_context:
+        memory_lines = [
+            f"- {_memory_layer_label(item.get('layer'))}：{item.get('content')}"
+            for item in memory_context[:3]
+        ]
+        paragraphs.append(
+            "已参考当前空间长期记忆（仅用于个性化学习重点，不作为资料引用）：\n"
+            + "\n".join(memory_lines)
+        )
     for index, citation in enumerate(citations[:5], start=1):
         heading = " / ".join(citation.heading_path) or "未命名片段"
         paragraphs.append(
@@ -350,10 +379,34 @@ def _insufficient_answer(trace: RetrievalTrace) -> str:
     return (
         f"资料不足：{reason}\n\n"
         "我不会在没有引用的情况下编造答案。你可以先上传相关资料，确认资料状态为“ready”，"
-        "或者扩大这次问答的来源范围后重试。"
+        "创建相关笔记，或者扩大这次问答的来源范围后重试。"
     )
 
 
 def _chunks(text: str, size: int = 120) -> Iterator[str]:
     for start in range(0, len(text), size):
         yield text[start : start + size]
+
+
+def _memory_context_prompt(memory_context: list[dict]) -> str:
+    if not memory_context:
+        return ""
+    lines = ["\n\n当前空间已确认长期记忆（仅用于个性化，不替代引用）："]
+    for index, item in enumerate(memory_context[:6], start=1):
+        lines.append(
+            f"[M{index}] {_memory_layer_label(item.get('layer'))}：{item.get('content')}"
+        )
+    return "\n".join(lines)
+
+
+def _memory_layer_label(layer: str | None) -> str:
+    labels = {
+        "space_profile": "空间画像记忆",
+        "source_semantic": "资料语义记忆",
+        "user_note": "用户笔记记忆",
+        "dialogue_episodic": "对话情节记忆",
+        "learning_ability": "学习能力记忆",
+        "preference": "偏好记忆",
+        "plan_progress": "计划进度记忆",
+    }
+    return labels.get(layer or "", "长期记忆")

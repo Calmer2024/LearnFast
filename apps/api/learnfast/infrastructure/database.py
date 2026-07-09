@@ -137,6 +137,7 @@ def init_db() -> None:
                 space_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
                 chunk_id TEXT NOT NULL,
+                source_type TEXT NOT NULL DEFAULT 'source',
                 source_id TEXT NOT NULL,
                 source_title TEXT NOT NULL,
                 version_id TEXT NOT NULL,
@@ -170,6 +171,96 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_notes_space_updated
                 ON notes(space_id, updated_at);
+
+            CREATE TABLE IF NOT EXISTS note_chunks (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                note_id TEXT NOT NULL,
+                version_id TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                heading_path_json TEXT NOT NULL DEFAULT '[]',
+                locator TEXT NOT NULL,
+                text TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                char_count INTEGER NOT NULL,
+                prev_chunk_id TEXT,
+                next_chunk_id TEXT,
+                embedding_provider TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                embedding_dim INTEGER NOT NULL,
+                embedding_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_note_chunks_space
+                ON note_chunks(space_id);
+            CREATE INDEX IF NOT EXISTS idx_note_chunks_note
+                ON note_chunks(note_id);
+            CREATE INDEX IF NOT EXISTS idx_note_chunks_version
+                ON note_chunks(note_id, version_id);
+
+            CREATE TABLE IF NOT EXISTS memory_settings (
+                space_id TEXT PRIMARY KEY,
+                auto_extract_enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS memory_candidates (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                layer TEXT NOT NULL,
+                content TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id TEXT,
+                source_title TEXT NOT NULL DEFAULT '',
+                source_excerpt TEXT NOT NULL DEFAULT '',
+                confidence REAL NOT NULL DEFAULT 0,
+                impact TEXT NOT NULL DEFAULT 'medium',
+                status TEXT NOT NULL DEFAULT 'pending',
+                content_hash TEXT NOT NULL,
+                accepted_memory_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(accepted_memory_id) REFERENCES memories(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_memory_candidates_space_status
+                ON memory_candidates(space_id, status, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_memory_candidates_source
+                ON memory_candidates(space_id, source_type, source_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_candidates_dedupe
+                ON memory_candidates(space_id, source_type, IFNULL(source_id, ''), content_hash);
+
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                layer TEXT NOT NULL,
+                content TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id TEXT,
+                source_title TEXT NOT NULL DEFAULT '',
+                source_excerpt TEXT NOT NULL DEFAULT '',
+                priority INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'active',
+                candidate_id TEXT,
+                content_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(candidate_id) REFERENCES memory_candidates(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_memories_space_status
+                ON memories(space_id, status, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_memories_source
+                ON memories(space_id, source_type, source_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedupe
+                ON memories(space_id, source_type, IFNULL(source_id, ''), content_hash);
 
             CREATE TABLE IF NOT EXISTS chat_feedback (
                 id TEXT PRIMARY KEY,
@@ -206,6 +297,7 @@ def init_db() -> None:
         _ensure_column(conn, "sources", "version_id", "TEXT")
         _ensure_column(conn, "sources", "chunk_count", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "sources", "indexed_at", "TEXT")
+        _ensure_column(conn, "citations", "source_type", "TEXT NOT NULL DEFAULT 'source'")
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:
