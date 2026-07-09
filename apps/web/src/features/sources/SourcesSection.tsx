@@ -1,3 +1,11 @@
+import {
+  ArrowClockwise,
+  FileArrowUp,
+  LinkSimple,
+  Power,
+  Trash,
+  UploadSimple,
+} from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { StatusBadge } from "../../components/StatusBadge";
@@ -22,6 +30,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [chunks, setChunks] = useState<SourceChunk[]>([]);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
+  const [fileSummary, setFileSummary] = useState("未选择文件");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -79,12 +88,23 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      setFileSummary("未选择文件");
       await loadSources();
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "上传失败");
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateFileSummary = () => {
+    const files = fileInputRef.current?.files;
+    if (!files || files.length === 0) {
+      setFileSummary("未选择文件");
+      return;
+    }
+    const names = Array.from(files).map((file) => file.name);
+    setFileSummary(names.length === 1 ? names[0] : `${names.length} 个文件已选择`);
   };
 
   const importUrl = async (event: FormEvent) => {
@@ -141,13 +161,27 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
           <label>
             上传文件
             <input
+              className="native-file-input"
               ref={fileInputRef}
               type="file"
               multiple
+              onChange={updateFileSummary}
               accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.epub,.csv,.xls,.xlsx"
             />
           </label>
+          <div className="file-picker">
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FileArrowUp size={15} />
+              选择文件
+            </button>
+            <span title={fileSummary}>{fileSummary}</span>
+          </div>
           <button className="button" onClick={upload} disabled={loading}>
+            <UploadSimple size={15} />
             {loading ? "处理中..." : "上传并转换"}
           </button>
         </div>
@@ -170,6 +204,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
             />
           </label>
           <button className="button" disabled={loading || !url.trim()}>
+            <LinkSimple size={15} />
             导入链接
           </button>
         </form>
@@ -193,14 +228,17 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               <div className="source-actions" onClick={(event) => event.stopPropagation()}>
                 <StatusBadge status={source.status} />
                 <button className="button ghost" onClick={() => toggleEnabled(source)}>
+                  <Power size={15} />
                   {source.enabled ? "停用" : "启用"}
                 </button>
                 {source.status === "failed" && (
                   <button className="button ghost" onClick={() => retry(source)}>
+                    <ArrowClockwise size={15} />
                     重试
                   </button>
                 )}
                 <button className="button ghost danger-text" onClick={() => deleteSource(source)}>
+                  <Trash size={15} />
                   删除
                 </button>
               </div>

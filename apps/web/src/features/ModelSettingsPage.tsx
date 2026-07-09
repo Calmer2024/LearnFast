@@ -1,3 +1,4 @@
+import { FloppyDisk, Plug } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "../components/StatusBadge";
@@ -220,8 +221,12 @@ function ProviderPanel({
         </label>
       </div>
       <div className="card-actions">
-        <button className="button">保存配置</button>
+        <button className="button">
+          <FloppyDisk size={15} />
+          保存配置
+        </button>
         <button className="button secondary" type="button" onClick={() => onTest(provider)}>
+          <Plug size={15} />
           连接测试
         </button>
       </div>

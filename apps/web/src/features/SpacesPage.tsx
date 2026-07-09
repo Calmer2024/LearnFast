@@ -1,5 +1,6 @@
+import { Archive, ArrowRight, Plus, Trash } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { StatusBadge } from "../components/StatusBadge";
 import { api } from "../lib/api";
@@ -67,9 +68,6 @@ export function SpacesPage() {
           <p className="eyebrow">本地单用户 MVP</p>
           <h1>学习空间</h1>
         </div>
-        <Link className="button secondary" to="/settings/models">
-          配置模型
-        </Link>
       </section>
 
       {error && <div className="notice danger">{error}</div>}
@@ -94,6 +92,7 @@ export function SpacesPage() {
             />
           </label>
           <button className="button" disabled={loading || !name.trim()}>
+            <Plus size={15} />
             {loading ? "创建中..." : "创建学习空间"}
           </button>
         </form>
@@ -133,12 +132,15 @@ export function SpacesPage() {
             </dl>
             <div className="card-actions">
               <button className="button" onClick={() => navigate(`/spaces/${space.id}/learning`)}>
+                <ArrowRight size={15} />
                 进入
               </button>
               <button className="button secondary" onClick={() => archiveSpace(space)}>
+                <Archive size={15} />
                 {space.status === "archived" ? "恢复" : "归档"}
               </button>
               <button className="button ghost danger-text" onClick={() => deleteSpace(space)}>
+                <Trash size={15} />
                 删除
               </button>
             </div>

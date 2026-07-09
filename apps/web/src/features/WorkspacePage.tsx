@@ -1,3 +1,12 @@
+import {
+  ArrowLeft,
+  Brain,
+  CalendarCheck,
+  ChartLine,
+  ChatTeardropText,
+  Files,
+  NotePencil,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
@@ -8,12 +17,12 @@ import { LearningSection } from "./learning/LearningSection";
 import { SourcesSection } from "./sources/SourcesSection";
 
 const sections = [
-  { id: "learning", label: "学习" },
-  { id: "sources", label: "资料" },
-  { id: "notes", label: "笔记" },
-  { id: "plans", label: "计划" },
-  { id: "memories", label: "记忆" },
-  { id: "reports", label: "报告" },
+  { id: "learning", label: "学习", icon: ChatTeardropText },
+  { id: "sources", label: "资料", icon: Files },
+  { id: "notes", label: "笔记", icon: NotePencil },
+  { id: "plans", label: "计划", icon: CalendarCheck },
+  { id: "memories", label: "记忆", icon: Brain },
+  { id: "reports", label: "报告", icon: ChartLine },
 ] as const;
 
 export function WorkspacePage() {
@@ -44,6 +53,7 @@ export function WorkspacePage() {
     <main className="workspace">
       <aside className="workspace-sidebar">
         <Link className="back-link" to="/">
+          <ArrowLeft size={14} />
           返回空间
         </Link>
         <div className="workspace-title">
@@ -58,6 +68,7 @@ export function WorkspacePage() {
               key={item.id}
               onClick={() => navigate(`/spaces/${spaceId}/${item.id}`)}
             >
+              <item.icon size={16} weight={item.id === activeSection ? "fill" : "regular"} />
               {item.label}
             </button>
           ))}

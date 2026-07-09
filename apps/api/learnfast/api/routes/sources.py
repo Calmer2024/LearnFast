@@ -1,5 +1,6 @@
 import hashlib
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, UploadFile
@@ -157,6 +158,7 @@ def _checksum(content: bytes) -> str:
 def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
     source = _get_source(space_id, source_id)
     error_code = "CONVERSION_ERROR"
+    started = perf_counter()
     try:
         log_event(
             "source",
@@ -167,6 +169,11 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
                 "source_id": source_id,
                 "title": source["title"],
                 "type": source["type"],
+                "origin": source["origin"],
+                "operation": "处理资料",
+                "stage": "prepare",
+                "status": source["status"],
+                "progress": 10,
             },
         )
         _update_job(job_id, "running", 10, "Preparing source.")
@@ -177,7 +184,15 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
             "source",
             "开始转换资料为 Markdown",
             space_id=space_id,
-            details={"job_id": job_id, "source_id": source_id, "title": source["title"]},
+            details={
+                "job_id": job_id,
+                "source_id": source_id,
+                "title": source["title"],
+                "operation": "转换 Markdown",
+                "stage": "converting",
+                "status": "converting",
+                "progress": 35,
+            },
         )
         conversion_input = source["raw_path"] if source["raw_path"] else source["origin"]
         markdown = convert_to_markdown(conversion_input)
@@ -185,9 +200,40 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
         markdown_file.write_text(markdown, encoding="utf-8")
         _update_job(job_id, "running", 55, "Saving Markdown preview.")
         _set_source_status(source_id, "converted", str(markdown_file))
+        log_event(
+            "source",
+            "Markdown 预览已保存",
+            space_id=space_id,
+            details={
+                "job_id": job_id,
+                "source_id": source_id,
+                "title": source["title"],
+                "operation": "保存预览",
+                "stage": "markdown_saved",
+                "result": "success",
+                "status": "converted",
+                "progress": 55,
+                "markdown_chars": len(markdown),
+            },
+        )
         error_code = "INDEXING_ERROR"
         _update_job(job_id, "running", 70, "Chunking Markdown.")
         _set_source_status(source_id, "chunking")
+        log_event(
+            "source",
+            "开始分析 Markdown 结构并生成分块",
+            space_id=space_id,
+            details={
+                "job_id": job_id,
+                "source_id": source_id,
+                "title": source["title"],
+                "operation": "生成分块",
+                "stage": "chunking",
+                "status": "chunking",
+                "progress": 70,
+                "markdown_chars": len(markdown),
+            },
+        )
         _update_job(job_id, "running", 85, "Generating embeddings and writing local index.")
         _set_source_status(source_id, "indexing")
         log_event(
@@ -198,6 +244,10 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
                 "job_id": job_id,
                 "source_id": source_id,
                 "title": source["title"],
+                "operation": "写入索引",
+                "stage": "indexing",
+                "status": "indexing",
+                "progress": 85,
                 "markdown_chars": len(markdown),
             },
         )
@@ -211,6 +261,7 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
             indexed_at=result.indexed_at,
         )
         _update_job(job_id, "completed", 100, "Source is indexed and ready.")
+        duration_ms = round((perf_counter() - started) * 1000)
         log_event(
             "source",
             "资料已完成索引，可用于问答",
@@ -219,12 +270,19 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
                 "job_id": job_id,
                 "source_id": source_id,
                 "title": source["title"],
+                "operation": "处理完成",
+                "stage": "ready",
+                "result": "success",
+                "status": "ready",
+                "progress": 100,
                 "version_id": result.version_id,
                 "chunk_count": result.chunk_count,
+                "duration_ms": duration_ms,
             },
         )
     except Exception as exc:
         message = str(exc)
+        duration_ms = round((perf_counter() - started) * 1000)
         _set_source_status(
             source_id,
             "failed",
@@ -241,8 +299,14 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
                 "job_id": job_id,
                 "source_id": source_id,
                 "title": source["title"],
+                "operation": "处理失败",
+                "stage": "failed",
+                "result": "failed",
+                "status": "failed",
+                "progress": 100,
                 "error_code": error_code,
                 "error": message,
+                "duration_ms": duration_ms,
             },
         )
 
@@ -321,7 +385,13 @@ async def upload_files(
                 "source_id": source_id,
                 "title": filename,
                 "type": suffix.lstrip("."),
+                "operation": "上传文件",
+                "stage": "queued",
+                "result": "queued",
+                "status": "uploaded",
+                "progress": 0,
                 "file_size_bytes": len(content),
+                "checksum": _checksum(content)[:16],
             },
         )
         background_tasks.add_task(process_source_job, space_id, source_id, job_id)
@@ -360,6 +430,11 @@ def import_url(space_id: str, payload: UrlImportIn, background_tasks: Background
             "source_id": source_id,
             "title": title,
             "type": source_type,
+            "operation": "导入链接",
+            "stage": "queued",
+            "result": "queued",
+            "status": "imported",
+            "progress": 0,
             "url": url,
         },
     )
@@ -424,7 +499,13 @@ def update_source(space_id: str, source_id: str, payload: SourceUpdateIn) -> dic
         "source",
         "资料设置已更新",
         space_id=space_id,
-        details={"source_id": source_id, "changes": values},
+        details={
+            "source_id": source_id,
+            "operation": "更新资料设置",
+            "stage": "updated",
+            "result": "success",
+            "changes": values,
+        },
     )
     return _source_response(_get_source(space_id, source_id))
 
@@ -440,7 +521,15 @@ def retry_source(space_id: str, source_id: str, background_tasks: BackgroundTask
         "source",
         "资料已重新加入处理队列",
         space_id=space_id,
-        details={"job_id": job_id, "source_id": source_id},
+        details={
+            "job_id": job_id,
+            "source_id": source_id,
+            "operation": "重新处理",
+            "stage": "queued",
+            "result": "queued",
+            "status": "queued",
+            "progress": 0,
+        },
     )
     background_tasks.add_task(process_source_job, space_id, source_id, job_id)
     return {**_source_response(_get_source(space_id, source_id)), "job_id": job_id}

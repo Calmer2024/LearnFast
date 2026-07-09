@@ -1,3 +1,11 @@
+import {
+  BookmarkSimple,
+  CheckSquare,
+  PaperPlaneTilt,
+  ThumbsDown,
+  ThumbsUp,
+  XSquare,
+} from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../../lib/api";
@@ -180,6 +188,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                       disabled={!message.content || savedMessageIds.has(message.id)}
                       onClick={() => saveAsNote(message)}
                     >
+                      <BookmarkSimple size={15} />
                       {savedMessageIds.has(message.id) ? "已保存" : "保存为笔记"}
                     </button>
                     <button
@@ -187,6 +196,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                       disabled={!message.content || feedbackMessageIds.has(message.id)}
                       onClick={() => submitFeedback(message, "up")}
                     >
+                      <ThumbsUp size={15} />
                       有帮助
                     </button>
                     <button
@@ -194,6 +204,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                       disabled={!message.content || feedbackMessageIds.has(message.id)}
                       onClick={() => submitFeedback(message, "down")}
                     >
+                      <ThumbsDown size={15} />
                       有问题
                     </button>
                   </div>
@@ -212,6 +223,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
             placeholder="例如：这些资料中 Pandas 数据清洗的核心步骤是什么？"
           />
           <button className="button" disabled={streaming || !question.trim()}>
+            <PaperPlaneTilt size={15} />
             {streaming ? "回答中..." : "提问"}
           </button>
         </form>
@@ -233,6 +245,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                 setSelectedSourceIds(readySourceIds);
               }}
             >
+              <CheckSquare size={15} />
               全选
             </button>
             <button
@@ -242,6 +255,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                 setSelectedSourceIds([]);
               }}
             >
+              <XSquare size={15} />
               清空
             </button>
           </div>
