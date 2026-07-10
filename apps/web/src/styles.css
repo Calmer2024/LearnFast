@@ -159,31 +159,29 @@ p {
 
 .brand-mark {
   align-items: center;
-  background:
-    linear-gradient(#ffffff, #ffffff) padding-box,
-    var(--brand-gradient) border-box;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
   display: inline-flex;
-  font-size: 12px;
   height: 40px;
   justify-content: center;
-  letter-spacing: 0;
-  line-height: 1;
-  position: relative;
+  padding: 3px;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
   width: 40px;
 }
 
-.brand-mark::after {
-  background: var(--brand-gradient);
-  border-radius: 999px;
-  bottom: 7px;
-  content: "";
-  height: 3px;
-  left: 11px;
-  position: absolute;
-  right: 11px;
+.brand-mark:hover {
+  background: var(--fresh-green-soft);
+}
+
+.brand-mark-image {
+  display: block;
+  height: 34px;
+  max-width: 34px;
+  object-fit: contain;
+  width: auto;
 }
 
 .rail-nav,

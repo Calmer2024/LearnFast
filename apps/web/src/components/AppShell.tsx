@@ -12,7 +12,7 @@ export function AppShell() {
     <div className="app-shell">
       <aside className="nav-rail" aria-label="工具导航">
         <Link className="brand-mark" to="/" title="LearnFast" aria-label="LearnFast 首页">
-          LF
+          <img className="brand-mark-image" src="/learnfast-logo.png" alt="" aria-hidden="true" />
         </Link>
         <nav className="rail-nav" aria-label="主导航">
           <Link
