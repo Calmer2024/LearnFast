@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  DownloadSimple,
   FileArrowUp,
   FloppyDisk,
   MagnifyingGlass,
@@ -11,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { useAppDialog } from "../../components/AppDialog";
 import { CustomSelect, type CustomSelectOption } from "../../components/CustomSelect";
 import { RichMarkdownEditor } from "../../components/RichMarkdownEditor";
 import { api } from "../../lib/api";
@@ -37,6 +39,7 @@ const statusFilterOptions: CustomSelectOption<NoteStatus | "all">[] = [
 ];
 
 export function NotesSection({ spaceId }: { spaceId: string }) {
+  const dialog = useAppDialog();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const documentStageRef = useRef<HTMLElement | null>(null);
   const shouldResetEditorScrollRef = useRef(false);
@@ -253,10 +256,20 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
   const deleteActiveNote = async () => {
     if (!activeNoteId) return;
     const noteTitle = title || activeNote?.title || "未命名笔记";
-    const deleteAssociatedMemories = window.confirm(
-      `删除笔记“${noteTitle}”前，是否同步删除由这条笔记生成的关联记忆？\n\n确定：删除笔记并请求同步删除关联记忆\n取消：只删除笔记`,
-    );
-    const confirmed = window.confirm(`确认删除笔记“${noteTitle}”？`);
+    const deleteAssociatedMemories = await dialog.confirm({
+      title: "同步删除关联记忆？",
+      body: `删除笔记“${noteTitle}”前，是否同步删除由这条笔记生成的关联记忆？`,
+      cancelLabel: "只删除笔记",
+      confirmLabel: "同步删除",
+    });
+    const confirmed = await dialog.confirm({
+      title: `确认删除笔记“${noteTitle}”？`,
+      body: deleteAssociatedMemories
+        ? "将删除笔记，并请求同步删除由它生成的长期记忆与待处理候选。"
+        : "将只删除笔记，关联记忆会保留。",
+      confirmLabel: "删除",
+      variant: "danger",
+    });
     if (!confirmed) return;
     setError(null);
     setNotice(null);
@@ -275,9 +288,29 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
     }
   };
 
+  const exportActiveNote = async () => {
+    if (!activeNoteId) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.exportNoteMarkdown(spaceId, activeNoteId);
+      const blob = new Blob([result.markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeFilename(result.title)}.md`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("笔记已导出为 Markdown。");
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "导出笔记失败");
+    }
+  };
+
 
   if (view === "editor") {
     return (
+      <>
       <form className="document-shell" onSubmit={saveNote}>
         <div className="document-topbar">
           <button className="button ghost" type="button" onClick={backToLibrary}>
@@ -290,6 +323,12 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
             {activeNote && <span>{new Date(activeNote.updated_at).toLocaleString()}</span>}
           </div>
           <div className="document-actions">
+            {activeNoteId && (
+              <button className="button ghost" type="button" onClick={exportActiveNote}>
+                <DownloadSimple size={15} />
+                导出
+              </button>
+            )}
             {activeNoteId && (
               <button className="button ghost danger-text" type="button" onClick={deleteActiveNote}>
                 <Trash size={15} />
@@ -339,6 +378,8 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
           </article>
         </main>
       </form>
+      {dialog.node}
+      </>
     );
   }
 
@@ -482,6 +523,7 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
           </section>
         </div>
       )}
+      {dialog.node}
     </div>
   );
 }
@@ -500,4 +542,8 @@ function parseTags(value: string): string[] {
 function compact(text: string, limit = 150) {
   const value = text.replace(/\s+/g, " ").trim();
   return value.length > limit ? `${value.slice(0, limit).trim()}...` : value;
+}
+
+function safeFilename(value: string) {
+  return value.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "learnfast-note";
 }

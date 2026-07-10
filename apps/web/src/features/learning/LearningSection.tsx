@@ -1,6 +1,7 @@
 import {
   BookmarkSimple,
   CheckSquare,
+  SidebarSimple,
   PaperPlaneTilt,
   ThumbsDown,
   ThumbsUp,
@@ -29,6 +30,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   const [selectionTouched, setSelectionTouched] = useState(false);
   const [question, setQuestion] = useState("");
   const [contextView, setContextView] = useState<LearningContextView>("overview");
+  const [contextCollapsed, setContextCollapsed] = useState(true);
   const [useMqe, setUseMqe] = useState(true);
   const [useHyde, setUseHyde] = useState(true);
   const [streaming, setStreaming] = useState(false);
@@ -37,6 +39,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [feedbackMessageIds, setFeedbackMessageIds] = useState<Set<string>>(new Set());
   const endRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const loadedReviewKeyRef = useRef("");
   const reviewTargetRef = useRef<ReviewTarget | null>(null);
   const pendingReviewTargetRef = useRef<ReviewTarget | null>(null);
@@ -95,6 +98,13 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, streaming]);
+
+  useEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`;
+  }, [question]);
 
   const submitQuestion = async (event: FormEvent) => {
     event.preventDefault();
@@ -212,7 +222,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   };
 
   return (
-    <div className="learning-layout">
+    <div className={`learning-layout ${contextCollapsed ? "context-collapsed" : ""}`.trim()}>
       <section className="chat-pane">
         <div className="section-header">
           <div>
@@ -233,7 +243,12 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
           )}
           {messages.map((message) => (
             <article className={`chat-message ${message.role}`} key={message.id}>
-              <div className="message-label">{message.role === "user" ? "你" : "LearnFast"}</div>
+              {message.role === "assistant" && (
+                <span className="agent-avatar" aria-hidden="true">
+                  <img src="/learnfast-logo.png" alt="" />
+                </span>
+              )}
+              {message.role === "user" && <div className="message-label">你</div>}
               {message.role === "assistant" ? (
                 <MarkdownRenderer
                   markdown={message.content}
@@ -280,18 +295,27 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
           <div ref={endRef} />
         </div>
 
-        <form className="chat-composer" onSubmit={submitQuestion}>
-          <textarea
-            rows={3}
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="例如：这些资料中 Pandas 数据清洗的核心步骤是什么？"
-          />
-          <button className="button" disabled={streaming || !question.trim()}>
-            <PaperPlaneTilt size={15} />
-            {streaming ? "回答中..." : "提问"}
-          </button>
-        </form>
+        <div className="chat-input-layer">
+          <form className="chat-composer" onSubmit={submitQuestion}>
+            <div className="chat-input-bar">
+              <textarea
+                ref={composerRef}
+                rows={1}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder="例如：这些资料中 Pandas 数据清洗的核心步骤是什么？"
+              />
+            </div>
+            <button
+              aria-label={streaming ? "回答中" : "提问"}
+              className="button chat-send-button"
+              disabled={streaming || !question.trim()}
+              title={streaming ? "回答中" : "提问"}
+            >
+              <PaperPlaneTilt size={17} />
+            </button>
+          </form>
+        </div>
       </section>
 
       <aside className="context-panel">
@@ -301,7 +325,17 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
               <p className="eyebrow">Context</p>
               <h3>本次问答上下文</h3>
             </div>
+            <button
+              className="icon-button context-collapse-button"
+              type="button"
+              aria-label={contextCollapsed ? "展开上下文面板" : "折叠上下文面板"}
+              title={contextCollapsed ? "展开上下文面板" : "折叠上下文面板"}
+              onClick={() => setContextCollapsed((current) => !current)}
+            >
+              <SidebarSimple size={17} />
+            </button>
           </div>
+          <div className="context-panel-content">
           <div className="context-metrics">
             <div>
               <span>可用资料</span>
@@ -339,8 +373,10 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
               检索
             </button>
           </div>
+          </div>
         </section>
 
+        <div className="context-panel-content">
         {contextView === "overview" && (
           <section className="panel context-summary-panel">
             <p className="eyebrow">Current Focus</p>
@@ -421,6 +457,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
             <p className="muted small-text">HyDE 只改善召回，不会作为真实来源引用展示。</p>
           </section>
         )}
+        </div>
       </aside>
     </div>
   );

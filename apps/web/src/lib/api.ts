@@ -3,6 +3,7 @@ import type {
   ChatStreamEvent,
   Health,
   LearningPlan,
+  LearningReport,
   MemoryCandidate,
   MemoryItem,
   MemoryLayer,
@@ -125,6 +126,10 @@ export const api = {
     request<{ query: string; results: SearchResult[] }>(
       `/spaces/${spaceId}/search?q=${encodeURIComponent(query)}`,
     ),
+  exportSpaceMarkdown: (spaceId: string) =>
+    request<{ space_id: string; title: string; markdown: string; metadata: Record<string, number> }>(
+      `/spaces/${spaceId}/export`,
+    ),
 
   listChatMessages: (spaceId: string) =>
     request<ChatMessage[]>(`/spaces/${spaceId}/chat/messages`),
@@ -225,6 +230,10 @@ export const api = {
       {
         method: "DELETE",
       },
+    ),
+  exportNoteMarkdown: (spaceId: string, noteId: string) =>
+    request<{ note_id: string; title: string; markdown: string }>(
+      `/spaces/${spaceId}/notes/${noteId}/export`,
     ),
   submitChatFeedback: (
     spaceId: string,
@@ -356,6 +365,38 @@ export const api = {
   exportPlanMarkdown: (spaceId: string, planId: string) =>
     request<{ plan_id: string; title: string; markdown: string }>(
       `/spaces/${spaceId}/plans/${planId}/export`,
+    ),
+
+  listReports: (spaceId: string) =>
+    request<LearningReport[]>(`/spaces/${spaceId}/reports`),
+  generateReport: (
+    spaceId: string,
+    payload: {
+      range_start?: string | null;
+      range_end?: string | null;
+      source_ids?: string[];
+      include_notes?: boolean;
+      include_memories?: boolean;
+      title?: string;
+    },
+  ) =>
+    request<LearningReport>(`/spaces/${spaceId}/reports/generate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getReport: (spaceId: string, reportId: string) =>
+    request<LearningReport>(`/spaces/${spaceId}/reports/${reportId}`),
+  saveReportNote: (spaceId: string, reportId: string, payload: { title?: string } = {}) =>
+    request<{ report: LearningReport; note: Note }>(
+      `/spaces/${spaceId}/reports/${reportId}/save-note`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+  exportReportMarkdown: (spaceId: string, reportId: string) =>
+    request<{ report_id: string; title: string; markdown: string }>(
+      `/spaces/${spaceId}/reports/${reportId}/export`,
     ),
 
   listMemoryLayers: () => request<MemoryLayer[]>("/memory-layers"),

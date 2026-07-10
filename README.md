@@ -1,6 +1,6 @@
 # LearnFast
 
-LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-09：
+LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-11：
 
 - MVP01：React + Python 本地应用骨架、健康检查、本地数据目录和 SQLite 初始化。
 - MVP02：用户自带模型密钥配置、聊天模型和向量模型分开配置、连接测试、默认模型选择。
@@ -11,7 +11,9 @@ LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆�
 - MVP07：Markdown 笔记列表、创建/编辑/删除、`.md` 笔记上传、碎片笔记、标签搜索、从回答保存笔记和笔记索引检索。
 - MVP08：记忆候选、长期记忆、七层分类、来源溯源、确认/改写/忽略/删除、空间级自动提取开关和问答记忆上下文。
 - MVP09：学习计划创建、本地 AI 计划生成、任务编辑/完成、计划调整建议、复习任务进入学习问答、复习结果回写和计划 Markdown 导出。
-- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记、计划、记忆和反馈等核心处理日志。
+- MVP10：手动学习报告生成、报告范围选择、证据来源、Markdown 输出、保存为笔记和 Markdown 导出。
+- MVP11：空间内统一搜索覆盖资料、chunk、笔记、记忆和计划任务；笔记、计划、报告和空间基础信息可导出 Markdown。
+- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记、计划、记忆、报告、搜索、导出和反馈等核心处理日志。
 
 ## 本地启动
 
@@ -41,7 +43,7 @@ npm --prefix apps\web run dev
 
 默认数据目录为项目根目录下的 `.learnfast-data/`，包含：
 
-- `learnfast.sqlite`：空间、模型配置、资料、任务状态、笔记、对话、计划、记忆和日志。
+- `learnfast.sqlite`：空间、模型配置、资料、任务状态、笔记、对话、计划、报告、记忆和日志。
 - `raw/`：原始上传资料。
 - `markdown/`：MarkItDown 转换后的 Markdown。
 - `secrets/`：当系统凭据管理器不可用时的本地密钥 fallback。
@@ -52,7 +54,7 @@ npm --prefix apps\web run dev
 
 当前 MVP 将模型配置拆成两个独立链路：
 
-- 聊天模型：仅支持 DeepSeek provider，用于学习问答、计划生成、报告生成、记忆提取等生成任务。默认模型为 `deepseek-v4-flash`，也可选择 `deepseek-v4-pro`。
+- 聊天模型：仅支持 DeepSeek provider，用于学习问答、记忆提取等生成任务。默认模型为 `deepseek-v4-flash`，也可选择 `deepseek-v4-pro`。
 - 向量模型：仅支持 Qwen provider 的 `text-embedding-v4`，用于资料分块向量化、RAG 检索和相似度召回。未配置向量 provider 时，MVP 会使用本地 deterministic hash embedding 跑通索引流程。
 
 Qwen 向量模型使用 Model Studio / DashScope 的 OpenAI-compatible embeddings API。需要填写带 WorkspaceId 的 Base URL，例如：
@@ -80,7 +82,8 @@ $env:VITE_API_BASE_URL="http://127.0.0.1:8000/api"
 - 第一阶段是本地单用户版本，没有账号和云同步。
 - 资料转换依赖 MarkItDown；文本/文档/表格类资料已加入自动转换测试，复杂扫描件、长音频、YouTube 字幕不可用时可能失败。
 - MVP06 未配置聊天模型时会使用本地摘录式回答兜底；配置 DeepSeek 聊天模型后会通过 OpenAI-compatible chat completions 流式生成回答。
-- MVP09 计划生成先使用本地确定性生成器，保证无模型配置时也能跑通创建、复习和回写闭环。
+- MVP09 计划生成和 MVP10 报告生成先使用本地确定性生成器，保证无模型配置时也能跑通计划、复习、报告和回写闭环。
+- MVP11 空间基础导出不包含模型密钥、provider 配置或本地文件路径。
 
 ## 测试
 
@@ -126,6 +129,20 @@ python tests\test_memories.py
 ```powershell
 conda activate learn-fast
 python tests\test_plans.py
+```
+
+验证手动学习报告生成、证据来源、保存为笔记和 Markdown 导出：
+
+```powershell
+conda activate learn-fast
+python tests\test_reports.py
+```
+
+验证统一搜索覆盖资料、笔记、记忆、计划任务，以及笔记/空间 Markdown 导出：
+
+```powershell
+conda activate learn-fast
+python tests\test_search_exports.py
 ```
 
 验证系统控制台日志写入、空间过滤和增量查询：

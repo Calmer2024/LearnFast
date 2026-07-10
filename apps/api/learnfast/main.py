@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from learnfast.api.routes import (
     chat,
+    exports,
     health,
     memories,
     model_settings,
     plans,
+    reports,
     search,
     sources,
     spaces,
@@ -37,6 +39,8 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix=settings.api_prefix)
     app.include_router(chat.router, prefix=settings.api_prefix)
     app.include_router(plans.router, prefix=settings.api_prefix)
+    app.include_router(reports.router, prefix=settings.api_prefix)
+    app.include_router(exports.router, prefix=settings.api_prefix)
     app.include_router(memories.router, prefix=settings.api_prefix)
     app.include_router(system_logs.router, prefix=settings.api_prefix)
     return app

@@ -4,7 +4,9 @@ import {
   CalendarCheck,
   ChartLine,
   ChatTeardropText,
+  DownloadSimple,
   Files,
+  MagnifyingGlass,
   NotePencil,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
@@ -17,10 +19,13 @@ import { LearningSection } from "./learning/LearningSection";
 import { MemoriesSection } from "./memories/MemoriesSection";
 import { NotesSection } from "./notes/NotesSection";
 import { PlansSection } from "./plans/PlansSection";
+import { ReportsSection } from "./reports/ReportsSection";
+import { SearchSection } from "./search/SearchSection";
 import { SourcesSection } from "./sources/SourcesSection";
 
 const sections = [
   { id: "learning", label: "学习", icon: ChatTeardropText },
+  { id: "search", label: "搜索", icon: MagnifyingGlass },
   { id: "sources", label: "资料", icon: Files },
   { id: "notes", label: "笔记", icon: NotePencil },
   { id: "plans", label: "计划", icon: CalendarCheck },
@@ -33,6 +38,7 @@ export function WorkspacePage() {
   const navigate = useNavigate();
   const [space, setSpace] = useState<Space | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const activeSection = section ?? "learning";
 
   useEffect(() => {
@@ -46,27 +52,51 @@ export function WorkspacePage() {
   const content = useMemo(() => {
     if (!spaceId) return null;
     if (activeSection === "learning") return <LearningSection spaceId={spaceId} />;
+    if (activeSection === "search") return <SearchSection spaceId={spaceId} />;
     if (activeSection === "sources") return <SourcesSection spaceId={spaceId} />;
     if (activeSection === "notes") return <NotesSection spaceId={spaceId} />;
     if (activeSection === "plans") return <PlansSection spaceId={spaceId} />;
     if (activeSection === "memories") return <MemoriesSection spaceId={spaceId} />;
+    if (activeSection === "reports") return <ReportsSection spaceId={spaceId} />;
     return <PlaceholderSection section={activeSection} />;
   }, [activeSection, spaceId]);
 
   if (!spaceId) return <Navigate to="/" replace />;
 
+  const exportSpace = async () => {
+    if (!spaceId || !space) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const result = await api.exportSpaceMarkdown(spaceId);
+      const blob = new Blob([result.markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeFilename(result.title)}.md`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "空间导出失败");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <main className="workspace">
       <aside className="workspace-sidebar">
-        <Link className="back-link" to="/">
-          <ArrowLeft size={14} />
-          返回空间
-        </Link>
-        <div className="workspace-title">
-          <h1>{space?.name ?? "学习空间"}</h1>
-          {space && <StatusBadge status={space.status} />}
+        <div className="workspace-heading">
+          <div className="workspace-title">
+            <h1>{space?.name ?? "学习空间"}</h1>
+            {space && <StatusBadge status={space.status} />}
+          </div>
+          <Link className="back-link" to="/">
+            <ArrowLeft size={14} />
+            返回空间
+          </Link>
         </div>
-        <p>{space?.goal || "还没有填写学习目标。"}</p>
+        <p className="workspace-goal">{space?.goal || "还没有填写学习目标。"}</p>
         <nav className="workspace-nav">
           {sections.map((item) => (
             <button
@@ -79,6 +109,10 @@ export function WorkspacePage() {
             </button>
           ))}
         </nav>
+        <button className="workspace-export" disabled={exporting || !space} onClick={exportSpace} type="button">
+          <DownloadSimple size={15} />
+          {exporting ? "导出中..." : "导出空间"}
+        </button>
       </aside>
       <section className="workspace-main">
         {error && <div className="notice danger">{error}</div>}
@@ -95,11 +129,16 @@ function PlaceholderSection({ section }: { section: string }) {
     plans: "计划",
     memories: "记忆",
     reports: "报告",
+    search: "搜索",
   };
   return (
     <div className="empty large">
       <h2>{labels[section] ?? "工作区"}</h2>
-      <p>MVP01-09 已完成本地骨架、模型设置、学习空间、资料导入、索引、问答、笔记、记忆、计划和复习问答闭环。这个入口已预留给后续阶段。</p>
+      <p>MVP01-11 已完成本地骨架、模型设置、学习空间、资料导入、索引、问答、笔记、记忆、计划、复习问答、报告、搜索和导出闭环。这个入口已预留给后续阶段。</p>
     </div>
   );
+}
+
+function safeFilename(value: string) {
+  return value.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "learnfast-space";
 }

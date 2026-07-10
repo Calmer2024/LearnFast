@@ -15,6 +15,7 @@ def health() -> dict:
         note_count = conn.execute("SELECT COUNT(*) AS count FROM notes").fetchone()["count"]
         plan_count = conn.execute("SELECT COUNT(*) AS count FROM plans").fetchone()["count"]
         plan_task_count = conn.execute("SELECT COUNT(*) AS count FROM plan_tasks").fetchone()["count"]
+        report_count = conn.execute("SELECT COUNT(*) AS count FROM reports").fetchone()["count"]
     return {
         "status": "ok",
         "version": __version__,
@@ -27,5 +28,6 @@ def health() -> dict:
             "notes": note_count,
             "plans": plan_count,
             "plan_tasks": plan_task_count,
+            "reports": report_count,
         },
     }

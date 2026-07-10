@@ -28,6 +28,7 @@ import type { Icon } from "@phosphor-icons/react";
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { useAppDialog } from "../../components/AppDialog";
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { StatusBadge } from "../../components/StatusBadge";
 import { api } from "../../lib/api";
@@ -70,6 +71,7 @@ const processingStatuses = new Set([
 export function SourcesSection({ spaceId }: { spaceId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
+  const dialog = useAppDialog();
   const [routeParams, setRouteParams] = useSearchParams();
   const [sources, setSources] = useState<Source[]>([]);
   const [importOpen, setImportOpen] = useState(false);
@@ -266,7 +268,12 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   };
 
   const deleteSource = async (source: Source) => {
-    const confirmed = window.confirm(`删除资料“${source.title}”？`);
+    const confirmed = await dialog.confirm({
+      title: `删除资料“${source.title}”？`,
+      body: "删除后会移除该资料的索引与详情记录。",
+      confirmLabel: "删除",
+      variant: "danger",
+    });
     if (!confirmed) return;
     await api.deleteSource(spaceId, source.id);
     if (selectedSourceId === source.id) closeSource();
@@ -280,50 +287,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   return (
     <div className="sources-layout">
       <section className="sources-board">
-        <div className="section-header sources-header">
-          <div>
-            <p className="eyebrow">Source Library</p>
-            <h2>资料</h2>
-          </div>
-          <button className="button" type="button" onClick={() => setImportOpen(true)}>
-            <UploadSimple size={15} />
-            导入资料
-          </button>
-        </div>
-
         {error && <div className="notice danger">{error}</div>}
         {message && <div className="notice success">{message}</div>}
-
-        <section className="source-overview" aria-label="资料状态概览">
-          <div>
-            <span>全部资料</span>
-            <strong>{sourceSummary.total}</strong>
-          </div>
-          <div>
-            <span>可问答</span>
-            <strong>{sourceSummary.ready}</strong>
-          </div>
-          <div>
-            <span>处理中</span>
-            <strong>{sourceSummary.processing}</strong>
-          </div>
-          <div>
-            <span>失败</span>
-            <strong>{sourceSummary.failed}</strong>
-          </div>
-        </section>
-
-        <div className="source-toolbar">
-          <label className="source-search">
-            <MagnifyingGlass size={16} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索资料、类型、状态或版本"
-            />
-          </label>
-          <span className="source-count">{visibleSources.length} / {sources.length} 个资料</span>
-        </div>
 
         {selected ? (
           <section className="source-preview-route">
@@ -423,88 +388,132 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
             )}
           </section>
         ) : (
-          <div className="source-card-grid">
-            {visibleSources.map((source) => {
-              const kind = sourceKind(source);
-              const icon = sourceIconConfig(kind);
-              const CardIcon = icon.Icon;
-              return (
-                <article
-                  aria-label={`打开资料预览：${source.title}`}
-                  className={`source-card ${source.enabled ? "" : "disabled"}`.trim()}
-                  key={source.id}
-                  onClick={() => openSource(source)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openSource(source);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="source-card-top">
-                    <span className={`source-file-icon source-file-${kind}`} title={icon.label}>
-                      <CardIcon size={24} weight="duotone" aria-hidden="true" />
-                      <span className="sr-only">{icon.label}</span>
-                    </span>
-                    <StatusBadge status={source.status} />
-                  </div>
-                  <div className="source-card-body">
-                    <h3>{source.title}</h3>
-                    <p title={source.origin}>{source.type} · {source.origin}</p>
-                  </div>
-                  <dl className="source-card-meta">
-                    <div>
-                      <dt>片段</dt>
-                      <dd>{source.chunk_count ?? 0}</dd>
+          <>
+            <div className="section-header sources-header">
+              <div>
+                <p className="eyebrow">Source Library</p>
+                <h2>资料</h2>
+              </div>
+              <button className="button" type="button" onClick={() => setImportOpen(true)}>
+                <UploadSimple size={15} />
+                导入资料
+              </button>
+            </div>
+
+            <section className="source-overview" aria-label="资料状态概览">
+              <div>
+                <span>全部资料</span>
+                <strong>{sourceSummary.total}</strong>
+              </div>
+              <div>
+                <span>可问答</span>
+                <strong>{sourceSummary.ready}</strong>
+              </div>
+              <div>
+                <span>处理中</span>
+                <strong>{sourceSummary.processing}</strong>
+              </div>
+              <div>
+                <span>失败</span>
+                <strong>{sourceSummary.failed}</strong>
+              </div>
+            </section>
+
+            <div className="source-toolbar">
+              <label className="source-search">
+                <MagnifyingGlass size={16} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="搜索资料、类型、状态或版本"
+                />
+              </label>
+              <span className="source-count">{visibleSources.length} / {sources.length} 个资料</span>
+            </div>
+
+            <div className="source-card-grid">
+              {visibleSources.map((source) => {
+                const kind = sourceKind(source);
+                const icon = sourceIconConfig(kind);
+                const CardIcon = icon.Icon;
+                return (
+                  <article
+                    aria-label={`打开资料预览：${source.title}`}
+                    className={`source-card ${source.enabled ? "" : "disabled"}`.trim()}
+                    key={source.id}
+                    onClick={() => openSource(source)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openSource(source);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="source-card-top">
+                      <span className={`source-file-icon source-file-${kind}`} title={icon.label}>
+                        <CardIcon size={24} weight="duotone" aria-hidden="true" />
+                        <span className="sr-only">{icon.label}</span>
+                      </span>
+                      <StatusBadge status={source.status} />
                     </div>
-                    <div>
-                      <dt>版本</dt>
-                      <dd>{source.version_id ?? "未记录"}</dd>
+                    <div className="source-card-body">
+                      <h3>{source.title}</h3>
+                      <p title={source.origin}>{source.type} · {source.origin}</p>
                     </div>
-                    <div>
-                      <dt>索引</dt>
-                      <dd>{formatDate(source.indexed_at)}</dd>
-                    </div>
-                  </dl>
-                  {source.error_message && <p className="error-line">{source.error_message}</p>}
-                  <div className="source-card-actions" onClick={(event) => event.stopPropagation()}>
-                    <button className="button ghost" type="button" onClick={() => openSource(source)}>
-                      <CardIcon size={15} weight="duotone" />
-                      预览
-                    </button>
-                    <button className="button ghost" type="button" onClick={() => toggleEnabled(source)}>
-                      <Power size={15} />
-                      {source.enabled ? "停用" : "启用"}
-                    </button>
-                    {source.status === "failed" && (
-                      <button className="button ghost" type="button" onClick={() => retry(source)}>
-                        <ArrowClockwise size={15} />
-                        重试
+                    <dl className="source-card-meta">
+                      <div>
+                        <dt>片段</dt>
+                        <dd>{source.chunk_count ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>版本</dt>
+                        <dd>{source.version_id ?? "未记录"}</dd>
+                      </div>
+                      <div>
+                        <dt>索引</dt>
+                        <dd>{formatDate(source.indexed_at)}</dd>
+                      </div>
+                    </dl>
+                    {source.error_message && <p className="error-line">{source.error_message}</p>}
+                    <div className="source-card-actions" onClick={(event) => event.stopPropagation()}>
+                      <button className="button ghost" type="button" onClick={() => openSource(source)}>
+                        <CardIcon size={15} weight="duotone" />
+                        预览
                       </button>
-                    )}
-                    <button className="button ghost danger-text" type="button" onClick={() => deleteSource(source)}>
-                      <Trash size={15} />
-                      删除
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-            {sources.length === 0 && (
-              <div className="empty source-grid-empty">
-                <h3>还没有资料</h3>
-                <p>点击右上角导入资料，系统会转成 Markdown 供后续问答使用。</p>
-              </div>
-            )}
-            {sources.length > 0 && visibleSources.length === 0 && (
-              <div className="empty source-grid-empty">
-                <h3>没有匹配的资料</h3>
-                <p>换一个关键词，或清空搜索查看全部资料。</p>
-              </div>
-            )}
-          </div>
+                      <button className="button ghost" type="button" onClick={() => toggleEnabled(source)}>
+                        <Power size={15} />
+                        {source.enabled ? "停用" : "启用"}
+                      </button>
+                      {source.status === "failed" && (
+                        <button className="button ghost" type="button" onClick={() => retry(source)}>
+                          <ArrowClockwise size={15} />
+                          重试
+                        </button>
+                      )}
+                      <button className="button ghost danger-text" type="button" onClick={() => deleteSource(source)}>
+                        <Trash size={15} />
+                        删除
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+              {sources.length === 0 && (
+                <div className="empty source-grid-empty">
+                  <h3>还没有资料</h3>
+                  <p>点击右上角导入资料，系统会转成 Markdown 供后续问答使用。</p>
+                </div>
+              )}
+              {sources.length > 0 && visibleSources.length === 0 && (
+                <div className="empty source-grid-empty">
+                  <h3>没有匹配的资料</h3>
+                  <p>换一个关键词，或清空搜索查看全部资料。</p>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </section>
 
@@ -590,6 +599,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
           </section>
         </div>
       )}
+      {dialog.node}
     </div>
   );
 }

@@ -105,7 +105,7 @@ export function ModelSettingsPage() {
       </section>
 
       <div className="notice">
-        聊天模型和向量模型分开配置，可以使用不同 provider。当前聊天模型只支持 DeepSeek，向量模型只支持 Qwen text-embedding-v4。
+        聊天模型和向量模型分开配置，可以使用不同 provider。下拉框已内置当前厂商兼容 API 支持的模型，也可以直接输入新模型名。
       </div>
       {message && <div className="notice success">{message}</div>}
       {error && <div className="notice danger">{error}</div>}

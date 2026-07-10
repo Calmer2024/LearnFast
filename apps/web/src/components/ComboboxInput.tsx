@@ -34,6 +34,7 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [query, setQuery] = useState("");
   const [position, setPosition] = useState<MenuPosition>({
     left: 0,
     top: 0,
@@ -49,10 +50,10 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
       seen.add(option);
       return true;
     });
-    const query = value.trim().toLowerCase();
-    if (!query) return uniqueOptions;
-    return uniqueOptions.filter((option) => option.toLowerCase().includes(query));
-  }, [options, value]);
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return uniqueOptions;
+    return uniqueOptions.filter((option) => option.toLowerCase().includes(normalizedQuery));
+  }, [options, query]);
   const menuId = `${id}-suggestions`;
 
   const updatePosition = useCallback(() => {
@@ -102,10 +103,12 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
       setOpen(false);
+      setQuery("");
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
+        setQuery("");
         inputRef.current?.focus();
       }
     };
@@ -125,6 +128,7 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
 
   const chooseOption = (option: string) => {
     onChange(option);
+    setQuery("");
     setOpen(false);
     window.requestAnimationFrame(() => inputRef.current?.focus());
   };
@@ -141,6 +145,7 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (!open) {
+        setQuery("");
         setOpen(true);
         return;
       }
@@ -154,6 +159,7 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
     }
     if (event.key === "Escape") {
       setOpen(false);
+      setQuery("");
     }
   };
 
@@ -175,10 +181,15 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
         aria-expanded={open}
         className="custom-combobox-input"
         onChange={(event) => {
-          onChange(event.target.value);
+          const nextValue = event.target.value;
+          onChange(nextValue);
+          setQuery(nextValue);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setQuery("");
+          setOpen(true);
+        }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         role="combobox"
@@ -190,7 +201,10 @@ export function ComboboxInput({ value, options, onChange, placeholder }: Combobo
         onClick={() => {
           setOpen((current) => {
             const next = !current;
-            if (next) window.requestAnimationFrame(() => inputRef.current?.focus());
+            if (next) {
+              setQuery("");
+              window.requestAnimationFrame(() => inputRef.current?.focus());
+            }
             return next;
           });
         }}

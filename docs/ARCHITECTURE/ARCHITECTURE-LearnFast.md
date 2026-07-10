@@ -461,12 +461,16 @@ flowchart LR
 | 学习 | `POST /api/spaces/{space_id}/chat/{message_id}/save-note` | 回答保存为笔记 |
 | 笔记 | `GET /api/spaces/{space_id}/notes` | 笔记列表 |
 | 笔记 | `POST /api/spaces/{space_id}/notes` | 创建笔记 |
+| 笔记 | `GET /api/spaces/{space_id}/notes/{note_id}/export` | 笔记导出 Markdown |
 | 计划 | `GET /api/spaces/{space_id}/plans/current` | 当前计划 |
 | 计划 | `POST /api/spaces/{space_id}/plans/generate` | AI 生成计划 |
 | 记忆 | `GET /api/spaces/{space_id}/memories` | 长期记忆 |
 | 记忆 | `GET /api/spaces/{space_id}/memory-candidates` | 记忆候选 |
 | 报告 | `POST /api/spaces/{space_id}/reports/generate` | 手动生成报告 |
+| 报告 | `POST /api/spaces/{space_id}/reports/{report_id}/save-note` | 报告保存为笔记 |
+| 报告 | `GET /api/spaces/{space_id}/reports/{report_id}/export` | 报告导出 Markdown |
 | 搜索 | `GET /api/spaces/{space_id}/search?q=` | 空间内统一搜索 |
+| 导出 | `GET /api/spaces/{space_id}/export` | 学习空间基础导出 |
 | 模型 | `GET /api/model-providers` | provider 列表 |
 | 模型 | `POST /api/model-providers/{id}/test` | 连接测试 |
 

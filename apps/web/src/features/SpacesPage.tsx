@@ -1,16 +1,19 @@
-import { Archive, ArrowRight, Plus, Trash } from "@phosphor-icons/react";
+import { Archive, ArrowRight, Plus, Trash, X } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useAppDialog } from "../components/AppDialog";
 import { StatusBadge } from "../components/StatusBadge";
 import { api } from "../lib/api";
 import type { Health, Space } from "../lib/types";
 
 export function SpacesPage() {
   const navigate = useNavigate();
+  const dialog = useAppDialog();
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export function SpacesPage() {
       const space = await api.createSpace({ name, goal });
       setName("");
       setGoal("");
+      setCreateOpen(false);
       navigate(`/spaces/${space.id}/learning`);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "创建失败");
@@ -55,7 +59,12 @@ export function SpacesPage() {
   };
 
   const deleteSpace = async (space: Space) => {
-    const confirmed = window.confirm(`删除学习空间“${space.name}”？该操作会删除空间内资料记录。`);
+    const confirmed = await dialog.confirm({
+      title: `删除学习空间“${space.name}”？`,
+      body: "该操作会删除空间内资料记录。",
+      confirmLabel: "删除",
+      variant: "danger",
+    });
     if (!confirmed) return;
     await api.deleteSpace(space.id);
     await load();
@@ -68,35 +77,13 @@ export function SpacesPage() {
           <p className="eyebrow">本地单用户 MVP</p>
           <h1>学习空间</h1>
         </div>
+        <button className="button" type="button" onClick={() => setCreateOpen(true)}>
+          <Plus size={15} />
+          创建学习空间
+        </button>
       </section>
 
       {error && <div className="notice danger">{error}</div>}
-
-      <section className="panel">
-        <form className="create-form" onSubmit={createSpace}>
-          <label>
-            空间名称
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="例如：Python 数据分析学习"
-            />
-          </label>
-          <label>
-            学习目标
-            <textarea
-              value={goal}
-              onChange={(event) => setGoal(event.target.value)}
-              placeholder="写下这个空间要解决的学习目标"
-              rows={3}
-            />
-          </label>
-          <button className="button" disabled={loading || !name.trim()}>
-            <Plus size={15} />
-            {loading ? "创建中..." : "创建学习空间"}
-          </button>
-        </form>
-      </section>
 
       <section className="toolbar">
         <div className="muted">
@@ -120,7 +107,7 @@ export function SpacesPage() {
               <StatusBadge status={space.status} />
             </div>
             <p>{space.goal || "还没有填写学习目标。"}</p>
-            <dl className="meta-grid">
+            <dl className="source-card-meta space-card-meta">
               <div>
                 <dt>资料</dt>
                 <dd>{space.counts.sources}</dd>
@@ -165,6 +152,54 @@ export function SpacesPage() {
           </div>
         )}
       </section>
+
+      {createOpen && (
+        <div className="modal-backdrop" onClick={() => setCreateOpen(false)}>
+          <section
+            aria-modal="true"
+            className="source-import-modal space-create-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="source-import-modal-head">
+              <div>
+                <p className="eyebrow">Create Space</p>
+                <h3>创建学习空间</h3>
+              </div>
+              <button className="button ghost" type="button" onClick={() => setCreateOpen(false)}>
+                <X size={15} />
+                关闭
+              </button>
+            </div>
+            <form className="modal-form" onSubmit={createSpace}>
+              <label>
+                空间名称
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="例如：Python 数据分析学习"
+                />
+              </label>
+              <label>
+                学习目标
+                <textarea
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="写下这个空间要解决的学习目标"
+                  rows={4}
+                />
+              </label>
+              <div className="card-actions">
+                <button className="button" disabled={loading || !name.trim()}>
+                  <Plus size={15} />
+                  {loading ? "创建中..." : "创建学习空间"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {dialog.node}
     </main>
   );
 }

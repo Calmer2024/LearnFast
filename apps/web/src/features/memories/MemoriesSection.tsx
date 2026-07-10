@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { useAppDialog } from "../../components/AppDialog";
 import { CustomSelect, type CustomSelectOption } from "../../components/CustomSelect";
 import { api } from "../../lib/api";
 import type {
@@ -51,6 +52,7 @@ const impactOptions: CustomSelectOption<MemoryCandidate["impact"]>[] = [
 ];
 
 export function MemoriesSection({ spaceId }: { spaceId: string }) {
+  const dialog = useAppDialog();
   const [memoryView, setMemoryView] = useState<MemoryView>("candidates");
   const [layers, setLayers] = useState<MemoryLayer[]>([]);
   const [settings, setSettings] = useState<MemorySettings | null>(null);
@@ -196,7 +198,12 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
   };
 
   const deleteMemory = async (memory: MemoryItem) => {
-    const confirmed = window.confirm(`删除这条长期记忆？\n\n${memory.content}`);
+    const confirmed = await dialog.confirm({
+      title: "删除这条长期记忆？",
+      body: memory.content,
+      confirmLabel: "删除",
+      variant: "danger",
+    });
     if (!confirmed) return;
     await runAction(async () => {
       await api.deleteMemory(spaceId, memory.id);
@@ -397,6 +404,7 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
           )}
         </section>
       </section>
+      {dialog.node}
     </div>
   );
 }

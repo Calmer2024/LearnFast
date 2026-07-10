@@ -38,6 +38,8 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import "katex/dist/katex.min.css";
 
+import { type AppPrompt, useAppDialog } from "./AppDialog";
+
 const lowlight = createLowlight(common);
 
 type RichMarkdownEditorProps = {
@@ -170,6 +172,7 @@ export function RichMarkdownEditor({
   onSave,
   autoFocusKey,
 }: RichMarkdownEditorProps) {
+  const dialog = useAppDialog();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<Editor | null>(null);
   const syncingRef = useRef(false);
@@ -261,9 +264,16 @@ export function RichMarkdownEditor({
         hint: "Markdown 图片",
         icon: ImageSquare,
         run: (editor) => {
-          const src = window.prompt("图片地址");
-          if (!src?.trim()) return;
-          runAfterSlash(editor, (chain) => chain.setImage({ src: src.trim() }).run());
+          void dialog
+            .prompt({
+              title: "插入图片",
+              inputLabel: "图片地址",
+              placeholder: "https://...",
+            })
+            .then((src) => {
+              if (!src?.trim()) return;
+              runAfterSlash(editor, (chain) => chain.setImage({ src: src.trim() }).run());
+            });
         },
       },
       {
@@ -272,9 +282,16 @@ export function RichMarkdownEditor({
         hint: "$E = mc^2$",
         icon: Sigma,
         run: (editor) => {
-          const latex = window.prompt("输入 LaTeX 公式", "E = mc^2");
-          if (!latex?.trim()) return;
-          runAfterSlash(editor, (chain) => chain.insertInlineMath({ latex: latex.trim() }).run());
+          void dialog
+            .prompt({
+              title: "行内公式",
+              defaultValue: "E = mc^2",
+              inputLabel: "LaTeX 公式",
+            })
+            .then((latex) => {
+              if (!latex?.trim()) return;
+              runAfterSlash(editor, (chain) => chain.insertInlineMath({ latex: latex.trim() }).run());
+            });
         },
       },
       {
@@ -283,13 +300,21 @@ export function RichMarkdownEditor({
         hint: "$$",
         icon: FunctionIcon,
         run: (editor) => {
-          const latex = window.prompt("输入 LaTeX 公式", "\\sum_{i=1}^{n} x_i");
-          if (!latex?.trim()) return;
-          runAfterSlash(editor, (chain) => chain.insertBlockMath({ latex: latex.trim() }).run());
+          void dialog
+            .prompt({
+              title: "公式块",
+              defaultValue: "\\sum_{i=1}^{n} x_i",
+              inputLabel: "LaTeX 公式",
+              multiline: true,
+            })
+            .then((latex) => {
+              if (!latex?.trim()) return;
+              runAfterSlash(editor, (chain) => chain.insertBlockMath({ latex: latex.trim() }).run());
+            });
         },
       },
     ],
-    [],
+    [dialog.prompt],
   );
 
   const slashCommandsVisible = getVisibleSlashCommands(slashCommands, slashState);
@@ -333,7 +358,7 @@ export function RichMarkdownEditor({
 
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
           event.preventDefault();
-          applyLink(currentEditor);
+          applyLink(currentEditor, dialog.prompt);
           return true;
         }
 
@@ -456,11 +481,12 @@ export function RichMarkdownEditor({
         <FloatingSelectionToolbar
           editor={editor}
           state={toolbar}
-          onLink={() => applyLink(editor)}
+          onLink={() => applyLink(editor, dialog.prompt)}
           onSave={onSave}
           onCommand={() => setToolbar((current) => (current ? { ...current } : current))}
         />
       )}
+      {dialog.node}
     </div>
   );
 }
@@ -560,15 +586,21 @@ function FloatingSelectionToolbar({
   );
 }
 
-function applyLink(editor: Editor) {
+function applyLink(editor: Editor, prompt: AppPrompt) {
   const currentHref = editor.getAttributes("link").href as string | undefined;
-  const href = window.prompt("链接地址", currentHref ?? "https://");
-  if (href === null) return;
-  if (!href.trim()) {
-    editor.chain().focus().extendMarkRange("link").unsetLink().run();
-    return;
-  }
-  editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run();
+  void prompt({
+    title: "链接地址",
+    defaultValue: currentHref ?? "https://",
+    inputLabel: "URL",
+    placeholder: "https://...",
+  }).then((href) => {
+    if (href === null) return;
+    if (!href.trim()) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run();
+  });
 }
 
 function applyTaskListShortcut(editor: Editor) {

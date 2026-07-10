@@ -327,6 +327,26 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_plan_task_events_task
                 ON plan_task_events(task_id, created_at);
 
+            CREATE TABLE IF NOT EXISTS reports (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                range_start TEXT NOT NULL,
+                range_end TEXT NOT NULL,
+                source_ids_json TEXT NOT NULL DEFAULT '[]',
+                markdown TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'generated',
+                saved_note_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(saved_note_id) REFERENCES notes(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reports_space_updated
+                ON reports(space_id, updated_at);
+
             CREATE TABLE IF NOT EXISTS chat_feedback (
                 id TEXT PRIMARY KEY,
                 space_id TEXT NOT NULL,

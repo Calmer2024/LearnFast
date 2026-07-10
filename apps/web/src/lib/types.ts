@@ -192,17 +192,61 @@ export type LearningPlan = {
   adjustment_suggestions: string[];
 };
 
+export type ReportEvidence = {
+  ref: string;
+  source_type: string;
+  source_label: string;
+  source_id: string;
+  title: string;
+  detail: string;
+  quote: string;
+};
+
+export type LearningReport = {
+  id: string;
+  space_id: string;
+  title: string;
+  range_start: string;
+  range_end: string;
+  source_ids: string[];
+  markdown?: string;
+  metadata: {
+    generation_mode?: string;
+    include_notes?: boolean;
+    include_memories?: boolean;
+    evidence_count?: number;
+    counts?: Record<string, number>;
+    evidences?: ReportEvidence[];
+  };
+  status: "generated" | "saved_note";
+  saved_note_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SearchResult = {
+  id: string;
   chunk_id: string;
-  source_type: "source" | "note";
+  result_type:
+    | "source_title"
+    | "source_chunk"
+    | "note"
+    | "note_chunk"
+    | "memory"
+    | "plan_task";
+  source_type: "source" | "note" | "memory" | "plan_task";
   source_id: string;
   source_title: string;
+  title: string;
   version_id: string;
   ordinal: number;
   heading_path: string[];
   locator: string;
   quote_snapshot: string;
   score: number;
+  created_at?: string;
+  updated_at?: string;
+  metadata: Record<string, unknown>;
 };
 
 export type MemoryLayerId =
@@ -312,5 +356,6 @@ export type Health = {
     notes: number;
     plans?: number;
     plan_tasks?: number;
+    reports?: number;
   };
 };
