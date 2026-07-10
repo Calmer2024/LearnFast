@@ -2,6 +2,7 @@ import type {
   ChatMessage,
   ChatStreamEvent,
   Health,
+  LearningPlan,
   MemoryCandidate,
   MemoryItem,
   MemoryLayer,
@@ -10,6 +11,10 @@ import type {
   MemorySourceType,
   ModelProvider,
   Note,
+  PlanTask,
+  PlanTaskPriority,
+  PlanTaskStatus,
+  PlanTaskType,
   SearchResult,
   Source,
   SourceChunk,
@@ -232,6 +237,125 @@ export const api = {
         method: "POST",
         body: JSON.stringify(payload),
       },
+    ),
+
+  getCurrentPlan: (spaceId: string) =>
+    request<LearningPlan | null>(`/spaces/${spaceId}/plans/current`),
+  createPlan: (
+    spaceId: string,
+    payload: {
+      title?: string;
+      goal: string;
+      cadence?: string;
+      target_level?: string;
+      deadline?: string | null;
+      assumptions?: Record<string, unknown>;
+      rationale?: string;
+      tasks?: Partial<PlanTask>[];
+      replace_current?: boolean;
+    },
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  generatePlan: (
+    spaceId: string,
+    payload: {
+      goal?: string;
+      cadence: string;
+      target_level: string;
+      deadline?: string | null;
+      replace_current?: boolean;
+    },
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/generate`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updatePlan: (
+    spaceId: string,
+    planId: string,
+    payload: Partial<{
+      title: string;
+      goal: string;
+      status: "active" | "archived";
+      cadence: string;
+      target_level: string;
+      deadline: string | null;
+    }>,
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  createPlanTask: (
+    spaceId: string,
+    planId: string,
+    payload: {
+      title: string;
+      description?: string;
+      task_type?: PlanTaskType;
+      status?: PlanTaskStatus;
+      priority?: PlanTaskPriority;
+      due_date?: string | null;
+      source_ids?: string[];
+      review_prompt?: string;
+      recommended_reason?: string;
+    },
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updatePlanTask: (
+    spaceId: string,
+    planId: string,
+    taskId: string,
+    payload: Partial<{
+      title: string;
+      description: string;
+      task_type: PlanTaskType;
+      status: PlanTaskStatus;
+      priority: PlanTaskPriority;
+      due_date: string | null;
+      source_ids: string[];
+      review_prompt: string;
+      recommended_reason: string;
+      order_index: number;
+    }>,
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  completePlanTask: (
+    spaceId: string,
+    planId: string,
+    taskId: string,
+    payload: { review_result?: string; message_id?: string } = {},
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}/tasks/${taskId}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  recordPlanReviewResult: (
+    spaceId: string,
+    planId: string,
+    taskId: string,
+    payload: { result: string; message_id?: string; mark_completed?: boolean },
+  ) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}/tasks/${taskId}/review-result`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deletePlanTask: (spaceId: string, planId: string, taskId: string) =>
+    request<LearningPlan>(`/spaces/${spaceId}/plans/${planId}/tasks/${taskId}`, {
+      method: "DELETE",
+    }),
+  exportPlanMarkdown: (spaceId: string, planId: string) =>
+    request<{ plan_id: string; title: string; markdown: string }>(
+      `/spaces/${spaceId}/plans/${planId}/export`,
     ),
 
   listMemoryLayers: () => request<MemoryLayer[]>("/memory-layers"),

@@ -1,6 +1,6 @@
 # LearnFast
 
-LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-08：
+LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆盖 MVP01-09：
 
 - MVP01：React + Python 本地应用骨架、健康检查、本地数据目录和 SQLite 初始化。
 - MVP02：用户自带模型密钥配置、聊天模型和向量模型分开配置、连接测试、默认模型选择。
@@ -10,7 +10,8 @@ LearnFast 是本地优先的个人知识库学习助手。当前代码实现覆�
 - MVP06：空间内学习问答、流式 RAG 回答、来源范围选择、MQE/HyDE 增强检索、引用展示、回答保存为笔记和反馈记录。
 - MVP07：Markdown 笔记列表、创建/编辑/删除、`.md` 笔记上传、碎片笔记、标签搜索、从回答保存笔记和笔记索引检索。
 - MVP08：记忆候选、长期记忆、七层分类、来源溯源、确认/改写/忽略/删除、空间级自动提取开关和问答记忆上下文。
-- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记、记忆和反馈等核心处理日志。
+- MVP09：学习计划创建、本地 AI 计划生成、任务编辑/完成、计划调整建议、复习任务进入学习问答、复习结果回写和计划 Markdown 导出。
+- 系统控制台：前端可展开/折叠控制台，透明展示空间、模型、资料处理、检索、RAG、问答、笔记、计划、记忆和反馈等核心处理日志。
 
 ## 本地启动
 
@@ -40,7 +41,7 @@ npm --prefix apps\web run dev
 
 默认数据目录为项目根目录下的 `.learnfast-data/`，包含：
 
-- `learnfast.sqlite`：空间、模型配置、资料、任务状态、笔记、对话、记忆和日志。
+- `learnfast.sqlite`：空间、模型配置、资料、任务状态、笔记、对话、计划、记忆和日志。
 - `raw/`：原始上传资料。
 - `markdown/`：MarkItDown 转换后的 Markdown。
 - `secrets/`：当系统凭据管理器不可用时的本地密钥 fallback。
@@ -79,6 +80,7 @@ $env:VITE_API_BASE_URL="http://127.0.0.1:8000/api"
 - 第一阶段是本地单用户版本，没有账号和云同步。
 - 资料转换依赖 MarkItDown；文本/文档/表格类资料已加入自动转换测试，复杂扫描件、长音频、YouTube 字幕不可用时可能失败。
 - MVP06 未配置聊天模型时会使用本地摘录式回答兜底；配置 DeepSeek 聊天模型后会通过 OpenAI-compatible chat completions 流式生成回答。
+- MVP09 计划生成先使用本地确定性生成器，保证无模型配置时也能跑通创建、复习和回写闭环。
 
 ## 测试
 
@@ -117,6 +119,13 @@ python tests\test_notes.py
 ```powershell
 conda activate learn-fast
 python tests\test_memories.py
+```
+
+验证学习计划生成、任务编辑完成、复习结果回写和 Markdown 导出：
+
+```powershell
+conda activate learn-fast
+python tests\test_plans.py
 ```
 
 验证系统控制台日志写入、空间过滤和增量查询：

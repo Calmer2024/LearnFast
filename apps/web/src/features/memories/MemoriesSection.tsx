@@ -21,6 +21,7 @@ import type {
 } from "../../lib/types";
 
 type CandidateStatus = "pending" | "accepted" | "ignored" | "all";
+type MemoryView = "candidates" | "memories" | "manual" | "settings";
 
 const sourceLabels: Record<MemorySourceType, string> = {
   chat: "对话",
@@ -50,6 +51,7 @@ const impactOptions: CustomSelectOption<MemoryCandidate["impact"]>[] = [
 ];
 
 export function MemoriesSection({ spaceId }: { spaceId: string }) {
+  const [memoryView, setMemoryView] = useState<MemoryView>("candidates");
   const [layers, setLayers] = useState<MemoryLayer[]>([]);
   const [settings, setSettings] = useState<MemorySettings | null>(null);
   const [candidates, setCandidates] = useState<MemoryCandidate[]>([]);
@@ -210,9 +212,9 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
             <p className="eyebrow">Memory Control</p>
             <h2>记忆</h2>
           </div>
-          <button className="button secondary" type="button" onClick={toggleAutoExtract} disabled={busy || !settings}>
+          <button className="button secondary" type="button" onClick={() => setMemoryView("settings")} disabled={busy || !settings}>
             <Brain size={15} />
-            {settings?.auto_extract_enabled ? "自动提取：开" : "自动提取：关"}
+            记忆设置
           </button>
         </section>
 
@@ -245,53 +247,120 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
           </label>
         </section>
 
-        <section className="memory-columns">
-          <div className="memory-column">
-            <div className="section-header compact">
-              <div>
-                <p className="eyebrow">Candidates</p>
-                <h3>记忆候选</h3>
-              </div>
-            </div>
-            <div className="memory-card-list">
-              {candidates.map((candidate) => (
-                <CandidateCard
-                  key={candidate.id}
-                  candidate={candidate}
-                  layerOptions={layerOptions}
-                  layerLabel={layerById.get(candidate.layer)?.label ?? candidate.layer}
-                  editing={editingCandidateId === candidate.id}
-                  draft={candidateDraft}
-                  draftLayer={candidateLayerDraft}
-                  draftImpact={candidateImpactDraft}
-                  busy={busy}
-                  onEdit={() => startEditCandidate(candidate)}
-                  onCancel={cancelEditCandidate}
-                  onDraftChange={setCandidateDraft}
-                  onDraftLayerChange={setCandidateLayerDraft}
-                  onDraftImpactChange={setCandidateImpactDraft}
-                  onSave={() => saveCandidateDraft(candidate)}
-                  onConfirm={() => confirmCandidate(candidate)}
-                  onIgnore={() => ignoreCandidate(candidate)}
-                />
-              ))}
-              {candidates.length === 0 && (
-                <div className="empty memory-empty">
-                  <h3>暂无候选</h3>
-                  <p>新的对话或笔记保存后，会在这里出现可治理的记忆候选。</p>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="context-tabs memory-tabs" role="tablist" aria-label="记忆面板视图">
+          <button
+            className={memoryView === "candidates" ? "active" : ""}
+            onClick={() => setMemoryView("candidates")}
+            type="button"
+          >
+            候选治理
+          </button>
+          <button
+            className={memoryView === "memories" ? "active" : ""}
+            onClick={() => setMemoryView("memories")}
+            type="button"
+          >
+            长期记忆
+          </button>
+          <button
+            className={memoryView === "manual" ? "active" : ""}
+            onClick={() => setMemoryView("manual")}
+            type="button"
+          >
+            手动添加
+          </button>
+          <button
+            className={memoryView === "settings" ? "active" : ""}
+            onClick={() => setMemoryView("settings")}
+            type="button"
+          >
+            设置
+          </button>
+        </div>
 
-          <div className="memory-column">
-            <div className="section-header compact">
-              <div>
-                <p className="eyebrow">Long Term</p>
-                <h3>长期记忆</h3>
+        <section className="memory-stage">
+          {memoryView === "candidates" && (
+            <div className="memory-column single">
+              <div className="section-header compact">
+                <div>
+                  <p className="eyebrow">Candidates</p>
+                  <h3>记忆候选</h3>
+                </div>
+              </div>
+              <div className="memory-card-list">
+                {candidates.map((candidate) => (
+                  <CandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    layerOptions={layerOptions}
+                    layerLabel={layerById.get(candidate.layer)?.label ?? candidate.layer}
+                    editing={editingCandidateId === candidate.id}
+                    draft={candidateDraft}
+                    draftLayer={candidateLayerDraft}
+                    draftImpact={candidateImpactDraft}
+                    busy={busy}
+                    onEdit={() => startEditCandidate(candidate)}
+                    onCancel={cancelEditCandidate}
+                    onDraftChange={setCandidateDraft}
+                    onDraftLayerChange={setCandidateLayerDraft}
+                    onDraftImpactChange={setCandidateImpactDraft}
+                    onSave={() => saveCandidateDraft(candidate)}
+                    onConfirm={() => confirmCandidate(candidate)}
+                    onIgnore={() => ignoreCandidate(candidate)}
+                  />
+                ))}
+                {candidates.length === 0 && (
+                  <div className="empty memory-empty">
+                    <h3>暂无候选</h3>
+                    <p>新的对话或笔记保存后，会在这里出现可治理的记忆候选。</p>
+                  </div>
+                )}
               </div>
             </div>
-            <form className="manual-memory-form" onSubmit={createManualMemory}>
+          )}
+
+          {memoryView === "memories" && (
+            <div className="memory-column single">
+              <div className="section-header compact">
+                <div>
+                  <p className="eyebrow">Long Term</p>
+                  <h3>长期记忆</h3>
+                </div>
+              </div>
+              <div className="memory-card-list">
+                {memories.map((memory) => (
+                  <article className="memory-card" key={memory.id}>
+                    <div className="memory-card-head">
+                      <span className="memory-layer-pill">{layerById.get(memory.layer)?.label ?? memory.layer}</span>
+                      <span className="memory-source">{sourceLabels[memory.source_type]}</span>
+                    </div>
+                    <p>{memory.content}</p>
+                    <SourceBlock
+                      title={memory.source_title}
+                      excerpt={memory.source_excerpt}
+                      createdAt={memory.updated_at}
+                    />
+                    <div className="memory-actions">
+                      <span className="memory-priority">优先级 {memory.priority}</span>
+                      <button className="button ghost danger-text" type="button" onClick={() => deleteMemory(memory)} disabled={busy}>
+                        <Trash size={15} />
+                        删除
+                      </button>
+                    </div>
+                  </article>
+                ))}
+                {memories.length === 0 && (
+                  <div className="empty memory-empty">
+                    <h3>暂无长期记忆</h3>
+                    <p>确认候选或手动添加后，长期记忆会参与当前空间的新问答。</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {memoryView === "manual" && (
+            <form className="manual-memory-form expanded" onSubmit={createManualMemory}>
               <label>
                 手动记忆层
                 <CustomSelect
@@ -303,7 +372,7 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
                 />
               </label>
               <textarea
-                rows={3}
+                rows={5}
                 value={manualContent}
                 onChange={(event) => setManualContent(event.target.value)}
                 placeholder="例如：这个空间的目标是两周内复习完 Pandas 数据清洗。"
@@ -313,36 +382,19 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
                 添加记忆
               </button>
             </form>
-            <div className="memory-card-list">
-              {memories.map((memory) => (
-                <article className="memory-card" key={memory.id}>
-                  <div className="memory-card-head">
-                    <span className="memory-layer-pill">{layerById.get(memory.layer)?.label ?? memory.layer}</span>
-                    <span className="memory-source">{sourceLabels[memory.source_type]}</span>
-                  </div>
-                  <p>{memory.content}</p>
-                  <SourceBlock
-                    title={memory.source_title}
-                    excerpt={memory.source_excerpt}
-                    createdAt={memory.updated_at}
-                  />
-                  <div className="memory-actions">
-                    <span className="memory-priority">优先级 {memory.priority}</span>
-                    <button className="button ghost danger-text" type="button" onClick={() => deleteMemory(memory)} disabled={busy}>
-                      <Trash size={15} />
-                      删除
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {memories.length === 0 && (
-                <div className="empty memory-empty">
-                  <h3>暂无长期记忆</h3>
-                  <p>确认候选或手动添加后，长期记忆会参与当前空间的新问答。</p>
-                </div>
-              )}
-            </div>
-          </div>
+          )}
+
+          {memoryView === "settings" && (
+            <section className="panel memory-settings-panel">
+              <p className="eyebrow">Settings</p>
+              <h3>自动提取</h3>
+              <p className="muted">开启后，对话和笔记会生成候选，不会直接进入长期记忆。</p>
+              <button className="button secondary" type="button" onClick={toggleAutoExtract} disabled={busy || !settings}>
+                <Brain size={15} />
+                {settings?.auto_extract_enabled ? "自动提取：开" : "自动提取：关"}
+              </button>
+            </section>
+          )}
         </section>
       </section>
     </div>

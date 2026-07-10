@@ -8,6 +8,7 @@ export type Space = {
   counts: {
     sources: number;
     notes: number;
+    plan: PlanProgressSummary;
   };
 };
 
@@ -136,6 +137,61 @@ export type Note = {
   updated_at: string;
 };
 
+export type PlanTaskType = "study" | "review" | "practice" | "note";
+export type PlanTaskStatus = "todo" | "in_progress" | "done" | "skipped";
+export type PlanTaskPriority = "low" | "medium" | "high";
+
+export type PlanProgressSummary = {
+  plan_id?: string | null;
+  total_tasks: number;
+  done_tasks: number;
+  active_tasks?: number;
+  review_tasks?: number;
+  review_done_tasks?: number;
+  overdue_tasks: number;
+  progress_percent: number;
+  last_completed_at?: string | null;
+};
+
+export type PlanTask = {
+  id: string;
+  space_id: string;
+  plan_id: string;
+  title: string;
+  description: string;
+  task_type: PlanTaskType;
+  status: PlanTaskStatus;
+  priority: PlanTaskPriority;
+  due_date?: string | null;
+  source_ids: string[];
+  review_prompt: string;
+  recommended_reason: string;
+  order_index: number;
+  completed_at?: string | null;
+  last_review_message_id?: string | null;
+  review_result: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LearningPlan = {
+  id: string;
+  space_id: string;
+  title: string;
+  goal: string;
+  status: "active" | "archived";
+  cadence: string;
+  target_level: string;
+  deadline?: string | null;
+  assumptions: Record<string, unknown>;
+  rationale: string;
+  created_at: string;
+  updated_at: string;
+  tasks: PlanTask[];
+  summary: PlanProgressSummary;
+  adjustment_suggestions: string[];
+};
+
 export type SearchResult = {
   chunk_id: string;
   source_type: "source" | "note";
@@ -254,5 +310,7 @@ export type Health = {
     spaces: number;
     sources: number;
     notes: number;
+    plans?: number;
+    plan_tasks?: number;
   };
 };

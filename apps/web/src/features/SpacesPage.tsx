@@ -126,6 +126,18 @@ export function SpacesPage() {
                 <dd>{space.counts.sources}</dd>
               </div>
               <div>
+                <dt>笔记</dt>
+                <dd>{space.counts.notes}</dd>
+              </div>
+              <div>
+                <dt>计划</dt>
+                <dd>
+                  {space.counts.plan.total_tasks > 0
+                    ? `${space.counts.plan.progress_percent}%`
+                    : "未创建"}
+                </dd>
+              </div>
+              <div>
                 <dt>更新</dt>
                 <dd>{new Date(space.updated_at).toLocaleString()}</dd>
               </div>

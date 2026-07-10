@@ -16,6 +16,7 @@ import type { Space } from "../lib/types";
 import { LearningSection } from "./learning/LearningSection";
 import { MemoriesSection } from "./memories/MemoriesSection";
 import { NotesSection } from "./notes/NotesSection";
+import { PlansSection } from "./plans/PlansSection";
 import { SourcesSection } from "./sources/SourcesSection";
 
 const sections = [
@@ -47,6 +48,7 @@ export function WorkspacePage() {
     if (activeSection === "learning") return <LearningSection spaceId={spaceId} />;
     if (activeSection === "sources") return <SourcesSection spaceId={spaceId} />;
     if (activeSection === "notes") return <NotesSection spaceId={spaceId} />;
+    if (activeSection === "plans") return <PlansSection spaceId={spaceId} />;
     if (activeSection === "memories") return <MemoriesSection spaceId={spaceId} />;
     return <PlaceholderSection section={activeSection} />;
   }, [activeSection, spaceId]);
@@ -97,7 +99,7 @@ function PlaceholderSection({ section }: { section: string }) {
   return (
     <div className="empty large">
       <h2>{labels[section] ?? "工作区"}</h2>
-      <p>MVP01-08 已完成本地骨架、模型设置、学习空间、资料导入、索引、问答、笔记和记忆。这个入口已预留给后续阶段。</p>
+      <p>MVP01-09 已完成本地骨架、模型设置、学习空间、资料导入、索引、问答、笔记、记忆、计划和复习问答闭环。这个入口已预留给后续阶段。</p>
     </div>
   );
 }

@@ -7,17 +7,28 @@ import {
   XSquare,
 } from "@phosphor-icons/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { api } from "../../lib/api";
 import type { ChatMessage, ChatStreamEvent, Citation, RetrievalTrace, Source } from "../../lib/types";
 
+type ReviewTarget = {
+  planId: string;
+  taskId: string;
+  prompt: string;
+};
+
+type LearningContextView = "overview" | "sources" | "retrieval";
+
 export function LearningSection({ spaceId }: { spaceId: string }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sources, setSources] = useState<Source[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
   const [question, setQuestion] = useState("");
+  const [contextView, setContextView] = useState<LearningContextView>("overview");
   const [useMqe, setUseMqe] = useState(true);
   const [useHyde, setUseHyde] = useState(true);
   const [streaming, setStreaming] = useState(false);
@@ -26,12 +37,23 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [feedbackMessageIds, setFeedbackMessageIds] = useState<Set<string>>(new Set());
   const endRef = useRef<HTMLDivElement | null>(null);
+  const loadedReviewKeyRef = useRef("");
+  const reviewTargetRef = useRef<ReviewTarget | null>(null);
+  const pendingReviewTargetRef = useRef<ReviewTarget | null>(null);
 
   const readySources = useMemo(
     () => sources.filter((source) => source.status === "ready" && source.enabled),
     [sources],
   );
   const readySourceIds = useMemo(() => readySources.map((source) => source.id), [readySources]);
+  const selectedReadyIds = useMemo(
+    () => selectedSourceIds.filter((id) => readySourceIds.includes(id)),
+    [readySourceIds, selectedSourceIds],
+  );
+  const lastAssistantMessage = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant"),
+    [messages],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +68,24 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
       mounted = false;
     };
   }, [spaceId]);
+
+  useEffect(() => {
+    const planId = searchParams.get("reviewPlanId");
+    const taskId = searchParams.get("reviewTaskId");
+    const prompt = searchParams.get("reviewPrompt");
+    if (!planId || !taskId || !prompt) return;
+    const key = `${planId}:${taskId}:${prompt}`;
+    if (loadedReviewKeyRef.current === key) return;
+    loadedReviewKeyRef.current = key;
+    reviewTargetRef.current = { planId, taskId, prompt };
+    setQuestion(prompt);
+    setNotice("已载入计划复习任务。提交后，复习结果会自动回写到计划进度。");
+    const next = new URLSearchParams(searchParams);
+    next.delete("reviewPlanId");
+    next.delete("reviewTaskId");
+    next.delete("reviewPrompt");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (selectionTouched) return;
@@ -64,8 +104,9 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
     setNotice(null);
     setStreaming(true);
     setQuestion("");
+    pendingReviewTargetRef.current = reviewTargetRef.current;
+    reviewTargetRef.current = null;
 
-    const selectedReadyIds = selectedSourceIds.filter((id) => readySourceIds.includes(id));
     const allReadySelected = readySourceIds.length > 0 && selectedReadyIds.length === readySourceIds.length;
 
     try {
@@ -113,9 +154,24 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
     }
     if (event.type === "done") {
       setMessages((current) => upsertMany(current, [event.message]));
+      const reviewTarget = pendingReviewTargetRef.current;
+      if (reviewTarget) {
+        pendingReviewTargetRef.current = null;
+        void api
+          .recordPlanReviewResult(spaceId, reviewTarget.planId, reviewTarget.taskId, {
+            message_id: event.message.id,
+            result: `复习问答已完成：${event.search.original_query || reviewTarget.prompt}`,
+            mark_completed: true,
+          })
+          .then(() => setNotice("复习结果已回写计划任务。"))
+          .catch((exc) =>
+            setError(exc instanceof Error ? exc.message : "复习结果回写失败"),
+          );
+      }
       return;
     }
     if (event.type === "error") {
+      pendingReviewTargetRef.current = null;
       setError(event.message);
     }
   };
@@ -239,68 +295,132 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
       </section>
 
       <aside className="context-panel">
-        <section className="panel">
+        <section className="panel context-overview-panel">
           <div className="section-header compact">
             <div>
-              <p className="eyebrow">Source Scope</p>
-              <h3>来源范围</h3>
+              <p className="eyebrow">Context</p>
+              <h3>本次问答上下文</h3>
             </div>
           </div>
-          <div className="source-scope-actions">
-            <button
-              className="button ghost"
-              onClick={() => {
-                setSelectionTouched(true);
-                setSelectedSourceIds(readySourceIds);
-              }}
-            >
-              <CheckSquare size={15} />
-              全选
-            </button>
-            <button
-              className="button ghost"
-              onClick={() => {
-                setSelectionTouched(true);
-                setSelectedSourceIds([]);
-              }}
-            >
-              <XSquare size={15} />
-              清空
-            </button>
+          <div className="context-metrics">
+            <div>
+              <span>可用资料</span>
+              <strong>{readySources.length}</strong>
+            </div>
+            <div>
+              <span>已选范围</span>
+              <strong>{selectedReadyIds.length}</strong>
+            </div>
+            <div>
+              <span>检索模式</span>
+              <strong>{useMqe || useHyde ? "增强" : "基础"}</strong>
+            </div>
           </div>
-          <div className="source-scope-list">
-            {readySources.map((source) => (
-              <label className="source-check" key={source.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedSourceIds.includes(source.id)}
-                  onChange={() => toggleSource(source.id)}
-                />
-                <span>
-                  <strong>{source.title}</strong>
-                  <small>{source.chunk_count ?? 0} 个片段</small>
-                </span>
-              </label>
-            ))}
-            {readySources.length === 0 && (
-              <p className="muted">当前没有已启用且可问答的资料。你仍可以提问，但系统会提示资料不足。</p>
-            )}
+          <div className="context-tabs" role="tablist" aria-label="学习问答上下文">
+            <button
+              className={contextView === "overview" ? "active" : ""}
+              onClick={() => setContextView("overview")}
+              type="button"
+            >
+              概览
+            </button>
+            <button
+              className={contextView === "sources" ? "active" : ""}
+              onClick={() => setContextView("sources")}
+              type="button"
+            >
+              来源
+            </button>
+            <button
+              className={contextView === "retrieval" ? "active" : ""}
+              onClick={() => setContextView("retrieval")}
+              type="button"
+            >
+              检索
+            </button>
           </div>
         </section>
 
-        <section className="panel">
-          <p className="eyebrow">Retrieval</p>
-          <h3>增强检索</h3>
-          <label className="inline-check">
-            <input type="checkbox" checked={useMqe} onChange={(event) => setUseMqe(event.target.checked)} />
-            MQE 多查询扩展
-          </label>
-          <label className="inline-check">
-            <input type="checkbox" checked={useHyde} onChange={(event) => setUseHyde(event.target.checked)} />
-            HyDE 假设文档检索
-          </label>
-          <p className="muted small-text">HyDE 只改善召回，不会作为真实来源引用展示。</p>
-        </section>
+        {contextView === "overview" && (
+          <section className="panel context-summary-panel">
+            <p className="eyebrow">Current Focus</p>
+            <h3>默认保持低干扰</h3>
+            <p className="muted">当前会使用你选中的资料范围回答。需要精确控制来源或关闭增强检索时，再切换到对应面板。</p>
+            {lastAssistantMessage?.context_snapshot && (
+              <div className="context-recent">
+                <span>最近一次检索</span>
+                <strong>{lastAssistantMessage.context_snapshot.context_count ?? 0} 个引用候选</strong>
+              </div>
+            )}
+          </section>
+        )}
+
+        {contextView === "sources" && (
+          <section className="panel">
+            <div className="section-header compact">
+              <div>
+                <p className="eyebrow">Source Scope</p>
+                <h3>来源范围</h3>
+              </div>
+            </div>
+            <div className="source-scope-actions">
+              <button
+                className="button ghost"
+                onClick={() => {
+                  setSelectionTouched(true);
+                  setSelectedSourceIds(readySourceIds);
+                }}
+              >
+                <CheckSquare size={15} />
+                全选
+              </button>
+              <button
+                className="button ghost"
+                onClick={() => {
+                  setSelectionTouched(true);
+                  setSelectedSourceIds([]);
+                }}
+              >
+                <XSquare size={15} />
+                清空
+              </button>
+            </div>
+            <div className="source-scope-list">
+              {readySources.map((source) => (
+                <label className="source-check" key={source.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSourceIds.includes(source.id)}
+                    onChange={() => toggleSource(source.id)}
+                  />
+                  <span>
+                    <strong>{source.title}</strong>
+                    <small>{source.chunk_count ?? 0} 个片段</small>
+                  </span>
+                </label>
+              ))}
+              {readySources.length === 0 && (
+                <p className="muted">当前没有已启用且可问答的资料。你仍可以提问，但系统会提示资料不足。</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {contextView === "retrieval" && (
+          <section className="panel">
+            <p className="eyebrow">Retrieval</p>
+            <h3>增强检索</h3>
+            <label className="inline-check">
+              <input type="checkbox" checked={useMqe} onChange={(event) => setUseMqe(event.target.checked)} />
+              MQE 多查询扩展
+            </label>
+            <label className="inline-check">
+              <input type="checkbox" checked={useHyde} onChange={(event) => setUseHyde(event.target.checked)} />
+              HyDE 假设文档检索
+            </label>
+            <p className="muted small-text">HyDE 只改善召回，不会作为真实来源引用展示。</p>
+          </section>
+        )}
       </aside>
     </div>
   );

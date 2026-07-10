@@ -7,6 +7,7 @@ from learnfast.core.errors import bad_request, conflict, not_found
 from learnfast.core.limits import MAX_SPACES
 from learnfast.infrastructure.database import get_db, row_to_dict, utc_now
 from learnfast.infrastructure.storage import data_dir, remove_paths
+from learnfast.services.plans import active_plan_summaries, active_plan_summary
 from learnfast.services.system_logs import log_event
 
 router = APIRouter(prefix="/spaces", tags=["spaces"])
@@ -26,7 +27,18 @@ class SpaceUpdate(BaseModel):
 def _space_payload(row: dict, counts: dict | None = None) -> dict:
     return {
         **row,
-        "counts": counts or {"sources": 0, "notes": 0},
+        "counts": counts
+        or {
+            "sources": 0,
+            "notes": 0,
+            "plan": {
+                "plan_id": None,
+                "total_tasks": 0,
+                "done_tasks": 0,
+                "progress_percent": 0,
+                "overdue_tasks": 0,
+            },
+        },
     }
 
 
@@ -61,10 +73,22 @@ def list_spaces(include_archived: bool = False) -> list[dict]:
                 "SELECT space_id, COUNT(*) AS count FROM notes GROUP BY space_id"
             ).fetchall()
         }
+    plan_counts = active_plan_summaries([row["id"] for row in rows])
     return [
         _space_payload(
             row,
-            {"sources": counts.get(row["id"], 0), "notes": note_counts.get(row["id"], 0)},
+            {
+                "sources": counts.get(row["id"], 0),
+                "notes": note_counts.get(row["id"], 0),
+                "plan": plan_counts.get(row["id"])
+                or {
+                    "plan_id": None,
+                    "total_tasks": 0,
+                    "done_tasks": 0,
+                    "progress_percent": 0,
+                    "overdue_tasks": 0,
+                },
+            },
         )
         for row in rows
     ]
@@ -106,7 +130,14 @@ def get_space(space_id: str) -> dict:
             "SELECT COUNT(*) AS count FROM notes WHERE space_id = ?",
             (space_id,),
         ).fetchone()["count"]
-    return _space_payload(space, {"sources": source_count, "notes": note_count})
+    return _space_payload(
+        space,
+        {
+            "sources": source_count,
+            "notes": note_count,
+            "plan": active_plan_summary(space_id),
+        },
+    )
 
 
 @router.patch("/{space_id}")

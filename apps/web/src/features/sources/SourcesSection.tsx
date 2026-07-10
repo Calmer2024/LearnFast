@@ -1,16 +1,61 @@
 import {
+  ArrowLeft,
   ArrowClockwise,
+  File as FileIcon,
   FileArrowUp,
+  FileAudio,
+  FileCode,
+  FileCsv,
+  FileDoc,
+  FileHtml,
+  FileImage,
+  FileMd,
+  FilePdf,
+  FilePpt,
+  FileText,
+  FileVideo,
+  FileXls,
+  FileZip,
+  GlobeSimple,
   LinkSimple,
+  MagnifyingGlass,
   Power,
   Trash,
   UploadSimple,
+  X,
 } from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
+import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { StatusBadge } from "../../components/StatusBadge";
 import { api } from "../../lib/api";
 import type { Source, SourceChunk } from "../../lib/types";
+
+type SourceDetailView = "markdown" | "chunks";
+type SourceKind =
+  | "audio"
+  | "code"
+  | "csv"
+  | "docx"
+  | "epub"
+  | "file"
+  | "html"
+  | "img"
+  | "md"
+  | "pdf"
+  | "pptx"
+  | "txt"
+  | "url"
+  | "video"
+  | "xlsx"
+  | "zip";
+
+type SourceIconConfig = {
+  Icon: Icon;
+  label: string;
+};
 
 const processingStatuses = new Set([
   "uploaded",
@@ -25,8 +70,10 @@ const processingStatuses = new Set([
 export function SourcesSection({ spaceId }: { spaceId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
+  const [routeParams, setRouteParams] = useSearchParams();
   const [sources, setSources] = useState<Source[]>([]);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [markdown, setMarkdown] = useState<string>("");
   const [chunks, setChunks] = useState<SourceChunk[]>([]);
   const [url, setUrl] = useState("");
@@ -36,23 +83,28 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const selectedSourceId = routeParams.get("source");
+  const detailView: SourceDetailView = routeParams.get("view") === "chunks" ? "chunks" : "markdown";
 
   const loadSources = async () => {
     const rows = await api.listSources(spaceId);
     setSources(rows);
-    if (!selectedSourceId && rows.length > 0) {
-      setSelectedSourceId(rows[0].id);
-    }
   };
 
   useEffect(() => {
     loadSources().catch((exc) => setError(exc.message));
   }, [spaceId]);
 
-  const hasProcessing = useMemo(
-    () => sources.some((source) => processingStatuses.has(source.status)),
+  const sourceSummary = useMemo(
+    () => ({
+      total: sources.length,
+      ready: sources.filter((source) => source.status === "ready").length,
+      processing: sources.filter((source) => processingStatuses.has(source.status)).length,
+      failed: sources.filter((source) => source.status === "failed").length,
+    }),
     [sources],
   );
+  const hasProcessing = sourceSummary.processing > 0;
 
   useEffect(() => {
     if (!hasProcessing) return;
@@ -60,7 +112,28 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
       loadSources().catch((exc) => setError(exc.message));
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [hasProcessing, spaceId, selectedSourceId]);
+  }, [hasProcessing, spaceId]);
+
+  useEffect(() => {
+    if (!selectedSourceId || sources.length === 0) return;
+    if (sources.some((source) => source.id === selectedSourceId)) return;
+    const next = new URLSearchParams(routeParams);
+    next.delete("source");
+    next.delete("view");
+    setRouteParams(next, { replace: true });
+  }, [routeParams, selectedSourceId, setRouteParams, sources]);
+
+  const visibleSources = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return sources;
+    return sources.filter((source) =>
+      [source.title, source.type, source.origin, source.status, source.version_id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [search, sources]);
 
   const selected = sources.find((source) => source.id === selectedSourceId) ?? null;
 
@@ -91,6 +164,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
         fileInputRef.current.value = "";
       }
       setFileSummary("未选择文件");
+      setImportOpen(false);
       await loadSources();
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "上传失败");
@@ -151,12 +225,34 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
       setUrl("");
       setTitle("");
       setMessage("链接已加入处理队列。");
+      setImportOpen(false);
       await loadSources();
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "导入失败");
     } finally {
       setLoading(false);
     }
+  };
+
+  const openSource = (source: Source) => {
+    const next = new URLSearchParams(routeParams);
+    next.set("source", source.id);
+    next.set("view", "markdown");
+    setRouteParams(next);
+  };
+
+  const closeSource = () => {
+    const next = new URLSearchParams(routeParams);
+    next.delete("source");
+    next.delete("view");
+    setRouteParams(next);
+  };
+
+  const switchDetailView = (view: SourceDetailView) => {
+    const next = new URLSearchParams(routeParams);
+    if (selectedSourceId) next.set("source", selectedSourceId);
+    next.set("view", view);
+    setRouteParams(next);
   };
 
   const toggleEnabled = async (source: Source) => {
@@ -173,178 +269,384 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
     const confirmed = window.confirm(`删除资料“${source.title}”？`);
     if (!confirmed) return;
     await api.deleteSource(spaceId, source.id);
-    if (selectedSourceId === source.id) setSelectedSourceId(null);
+    if (selectedSourceId === source.id) closeSource();
     await loadSources();
   };
 
+  const selectedKind = selected ? sourceKind(selected) : "file";
+  const selectedIcon = sourceIconConfig(selectedKind);
+  const SelectedIcon = selectedIcon.Icon;
+
   return (
     <div className="sources-layout">
-      <section className="sources-left">
-        <div className="section-header">
+      <section className="sources-board">
+        <div className="section-header sources-header">
           <div>
             <p className="eyebrow">Source Library</p>
             <h2>资料</h2>
           </div>
+          <button className="button" type="button" onClick={() => setImportOpen(true)}>
+            <UploadSimple size={15} />
+            导入资料
+          </button>
         </div>
 
         {error && <div className="notice danger">{error}</div>}
         {message && <div className="notice success">{message}</div>}
 
-        <div
-          className={`panel upload-dropzone ${fileDragActive ? "dragging" : ""}`.trim()}
-          onDragEnter={handleFileDragEnter}
-          onDragLeave={handleFileDragLeave}
-          onDragOver={handleFileDragOver}
-          onDrop={handleFileDrop}
-        >
-          <label>
-            上传文件
-            <input
-              className="native-file-input"
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={() => updateFileSummary()}
-              accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.epub,.csv,.xls,.xlsx"
-            />
-          </label>
-          <div className="file-picker">
-            <button
-              className="button secondary"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FileArrowUp size={15} />
-              选择文件
-            </button>
-            <span title={fileSummary}>{fileSummary}</span>
-          </div>
-          <p className="drop-hint">也可以一次拖拽多个文件到这里上传。</p>
-          <button className="button" onClick={() => upload()} disabled={loading}>
-            <UploadSimple size={15} />
-            {loading ? "处理中..." : "上传并转换"}
-          </button>
-        </div>
-
-        <form className="panel" onSubmit={importUrl}>
-          <label>
-            网页或 YouTube 链接
-            <input
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://..."
-            />
-          </label>
-          <label>
-            标题
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="可选"
-            />
-          </label>
-          <button className="button" disabled={loading || !url.trim()}>
-            <LinkSimple size={15} />
-            导入链接
-          </button>
-        </form>
-
-        <div className="source-list">
-          {sources.map((source) => (
-            <article
-              className={`source-row ${selectedSourceId === source.id ? "selected" : ""}`}
-              key={source.id}
-              onClick={() => setSelectedSourceId(source.id)}
-            >
-              <div>
-                <h3>{source.title}</h3>
-                <p>{source.type} · {source.origin}</p>
-                {source.status === "ready" && (
-                  <p>
-                    {source.chunk_count ?? 0} 个片段 · {source.version_id ?? "未记录版本"}
-                  </p>
-                )}
-              </div>
-              <div className="source-actions" onClick={(event) => event.stopPropagation()}>
-                <StatusBadge status={source.status} />
-                <button className="button ghost" onClick={() => toggleEnabled(source)}>
-                  <Power size={15} />
-                  {source.enabled ? "停用" : "启用"}
-                </button>
-                {source.status === "failed" && (
-                  <button className="button ghost" onClick={() => retry(source)}>
-                    <ArrowClockwise size={15} />
-                    重试
-                  </button>
-                )}
-                <button className="button ghost danger-text" onClick={() => deleteSource(source)}>
-                  <Trash size={15} />
-                  删除
-                </button>
-              </div>
-              {source.error_message && <p className="error-line">{source.error_message}</p>}
-            </article>
-          ))}
-          {sources.length === 0 && (
-            <div className="empty">
-              <h3>还没有资料</h3>
-              <p>上传文件或导入链接，系统会转成 Markdown 供后续问答使用。</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="preview-pane">
-        <div className="section-header">
+        <section className="source-overview" aria-label="资料状态概览">
           <div>
-            <p className="eyebrow">Markdown Preview</p>
-            <h2>{selected?.title ?? "选择一个资料"}</h2>
+            <span>全部资料</span>
+            <strong>{sourceSummary.total}</strong>
           </div>
-          {selected && <StatusBadge status={selected.status} />}
+          <div>
+            <span>可问答</span>
+            <strong>{sourceSummary.ready}</strong>
+          </div>
+          <div>
+            <span>处理中</span>
+            <strong>{sourceSummary.processing}</strong>
+          </div>
+          <div>
+            <span>失败</span>
+            <strong>{sourceSummary.failed}</strong>
+          </div>
+        </section>
+
+        <div className="source-toolbar">
+          <label className="source-search">
+            <MagnifyingGlass size={16} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="搜索资料、类型、状态或版本"
+            />
+          </label>
+          <span className="source-count">{visibleSources.length} / {sources.length} 个资料</span>
         </div>
-        {selected?.status === "ready" ? (
-          <>
-            <div className="index-summary">
-              <div>
-                <span>Chunk 数</span>
-                <strong>{selected.chunk_count ?? chunks.length}</strong>
-              </div>
-              <div>
-                <span>索引版本</span>
-                <strong>{selected.version_id ?? "未记录"}</strong>
-              </div>
-              <div>
-                <span>索引时间</span>
-                <strong>{selected.indexed_at ? new Date(selected.indexed_at).toLocaleString() : "未记录"}</strong>
+
+        {selected ? (
+          <section className="source-preview-route">
+            <div className="source-route-head">
+              <button className="button ghost" type="button" onClick={closeSource}>
+                <ArrowLeft size={15} />
+                返回资料库
+              </button>
+              <div className="source-route-label">
+                <span>资料库</span>
+                <span>/</span>
+                <strong>{detailView === "chunks" ? "Chunk 片段" : "Markdown Preview"}</strong>
               </div>
             </div>
 
-            {chunks.length > 0 && (
-              <div className="chunk-preview-list">
-                {chunks.slice(0, 3).map((chunk) => (
-                  <article className="chunk-preview" key={chunk.id}>
-                    <div className="chunk-meta">
-                      <strong>#{chunk.ordinal + 1}</strong>
-                      <span>{chunk.heading_path.join(" / ") || "未命名片段"}</span>
-                      <span>{chunk.locator}</span>
-                    </div>
-                    <p>{compact(chunk.text)}</p>
-                  </article>
-                ))}
+            <div className="source-preview-head">
+              <span className={`source-file-icon source-file-${selectedKind} large`} title={selectedIcon.label}>
+                <SelectedIcon size={30} weight="duotone" aria-hidden="true" />
+                <span className="sr-only">{selectedIcon.label}</span>
+              </span>
+              <div>
+                <p className="eyebrow">Markdown Preview</p>
+                <h3>{selected.title}</h3>
+                <p>{selected.type} · {selected.origin}</p>
+              </div>
+              <StatusBadge status={selected.status} />
+            </div>
+
+            {selected.status === "ready" ? (
+              <>
+                <div className="index-summary compact">
+                  <div>
+                    <span>Chunk 数</span>
+                    <strong>{selected.chunk_count ?? chunks.length}</strong>
+                  </div>
+                  <div>
+                    <span>索引版本</span>
+                    <strong>{selected.version_id ?? "未记录"}</strong>
+                  </div>
+                  <div>
+                    <span>索引时间</span>
+                    <strong>{formatDate(selected.indexed_at, true)}</strong>
+                  </div>
+                </div>
+
+                <div className="context-tabs source-detail-tabs" role="tablist" aria-label="资料详情">
+                  <button
+                    className={detailView === "markdown" ? "active" : ""}
+                    onClick={() => switchDetailView("markdown")}
+                    type="button"
+                  >
+                    Markdown 文档
+                  </button>
+                  <button
+                    className={detailView === "chunks" ? "active" : ""}
+                    onClick={() => switchDetailView("chunks")}
+                    type="button"
+                  >
+                    Chunk 片段
+                  </button>
+                </div>
+
+                {detailView === "markdown" ? (
+                  <div className="source-markdown-stage">
+                    <MarkdownRenderer
+                      className="source-markdown-rendered"
+                      markdown={markdown}
+                      emptyText="正在读取 Markdown..."
+                    />
+                  </div>
+                ) : (
+                  <div className="chunk-full-list">
+                    {chunks.map((chunk) => (
+                      <article className="chunk-preview" key={chunk.id}>
+                        <div className="chunk-meta">
+                          <strong>#{chunk.ordinal + 1}</strong>
+                          <span>{chunk.heading_path.join(" / ") || "未命名片段"}</span>
+                          <span>{chunk.locator}</span>
+                        </div>
+                        <p>{compact(chunk.text, 520)}</p>
+                      </article>
+                    ))}
+                    {chunks.length === 0 && (
+                      <div className="empty">
+                        <h3>暂时没有 chunk</h3>
+                        <p>资料索引完成后会在这里列出全部片段。</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="empty large source-preview-empty">
+                <h3>Markdown 尚未可用</h3>
+                <p>资料处理完成后会在这里展示转换结果。</p>
               </div>
             )}
-
-            <pre className="markdown-preview">{markdown || "正在读取 Markdown..."}</pre>
-          </>
+          </section>
         ) : (
-          <div className="empty large">
-            <h3>Markdown 尚未可用</h3>
-            <p>资料处理完成后会在这里展示转换结果。</p>
+          <div className="source-card-grid">
+            {visibleSources.map((source) => {
+              const kind = sourceKind(source);
+              const icon = sourceIconConfig(kind);
+              const CardIcon = icon.Icon;
+              return (
+                <article
+                  aria-label={`打开资料预览：${source.title}`}
+                  className={`source-card ${source.enabled ? "" : "disabled"}`.trim()}
+                  key={source.id}
+                  onClick={() => openSource(source)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openSource(source);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="source-card-top">
+                    <span className={`source-file-icon source-file-${kind}`} title={icon.label}>
+                      <CardIcon size={24} weight="duotone" aria-hidden="true" />
+                      <span className="sr-only">{icon.label}</span>
+                    </span>
+                    <StatusBadge status={source.status} />
+                  </div>
+                  <div className="source-card-body">
+                    <h3>{source.title}</h3>
+                    <p title={source.origin}>{source.type} · {source.origin}</p>
+                  </div>
+                  <dl className="source-card-meta">
+                    <div>
+                      <dt>片段</dt>
+                      <dd>{source.chunk_count ?? 0}</dd>
+                    </div>
+                    <div>
+                      <dt>版本</dt>
+                      <dd>{source.version_id ?? "未记录"}</dd>
+                    </div>
+                    <div>
+                      <dt>索引</dt>
+                      <dd>{formatDate(source.indexed_at)}</dd>
+                    </div>
+                  </dl>
+                  {source.error_message && <p className="error-line">{source.error_message}</p>}
+                  <div className="source-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <button className="button ghost" type="button" onClick={() => openSource(source)}>
+                      <CardIcon size={15} weight="duotone" />
+                      预览
+                    </button>
+                    <button className="button ghost" type="button" onClick={() => toggleEnabled(source)}>
+                      <Power size={15} />
+                      {source.enabled ? "停用" : "启用"}
+                    </button>
+                    {source.status === "failed" && (
+                      <button className="button ghost" type="button" onClick={() => retry(source)}>
+                        <ArrowClockwise size={15} />
+                        重试
+                      </button>
+                    )}
+                    <button className="button ghost danger-text" type="button" onClick={() => deleteSource(source)}>
+                      <Trash size={15} />
+                      删除
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+            {sources.length === 0 && (
+              <div className="empty source-grid-empty">
+                <h3>还没有资料</h3>
+                <p>点击右上角导入资料，系统会转成 Markdown 供后续问答使用。</p>
+              </div>
+            )}
+            {sources.length > 0 && visibleSources.length === 0 && (
+              <div className="empty source-grid-empty">
+                <h3>没有匹配的资料</h3>
+                <p>换一个关键词，或清空搜索查看全部资料。</p>
+              </div>
+            )}
           </div>
         )}
       </section>
+
+      {importOpen && (
+        <div className="modal-backdrop" onClick={() => setImportOpen(false)}>
+          <section
+            aria-modal="true"
+            className="source-import-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="source-import-modal-head">
+              <div>
+                <p className="eyebrow">Import Source</p>
+                <h3>导入资料</h3>
+              </div>
+              <button className="button ghost" type="button" onClick={() => setImportOpen(false)}>
+                <X size={15} />
+                关闭
+              </button>
+            </div>
+
+            <div className="source-import-grid">
+              <div
+                className={`panel upload-dropzone ${fileDragActive ? "dragging" : ""}`.trim()}
+                onDragEnter={handleFileDragEnter}
+                onDragLeave={handleFileDragLeave}
+                onDragOver={handleFileDragOver}
+                onDrop={handleFileDrop}
+              >
+                <label>
+                  上传文件
+                  <input
+                    accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.epub,.csv,.xls,.xlsx"
+                    className="native-file-input"
+                    multiple
+                    onChange={() => updateFileSummary()}
+                    ref={fileInputRef}
+                    type="file"
+                  />
+                </label>
+                <div className="file-picker">
+                  <button
+                    className="button secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    type="button"
+                  >
+                    <FileArrowUp size={15} />
+                    选择文件
+                  </button>
+                  <span title={fileSummary}>{fileSummary}</span>
+                </div>
+                <p className="drop-hint">也可以一次拖拽多个文件到这里上传。</p>
+                <button className="button" disabled={loading} onClick={() => upload()} type="button">
+                  <UploadSimple size={15} />
+                  {loading ? "处理中..." : "上传并转换"}
+                </button>
+              </div>
+
+              <form className="panel" onSubmit={importUrl}>
+                <label>
+                  网页或 YouTube 链接
+                  <input
+                    onChange={(event) => setUrl(event.target.value)}
+                    placeholder="https://..."
+                    value={url}
+                  />
+                </label>
+                <label>
+                  标题
+                  <input
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="可选"
+                    value={title}
+                  />
+                </label>
+                <button className="button" disabled={loading || !url.trim()}>
+                  <LinkSimple size={15} />
+                  导入链接
+                </button>
+              </form>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
+}
+
+function sourceKind(source: Source): SourceKind {
+  const value = `${source.type ?? ""} ${source.origin ?? ""}`.toLowerCase();
+  const extension = value.match(/\.([a-z0-9]+)(?:[?#]|\s|$)/)?.[1] ?? source.type.toLowerCase();
+
+  if (value.includes("youtube") || value.startsWith("url") || source.type === "url") return "url";
+  if (["md", "markdown"].includes(extension)) return "md";
+  if (["ppt", "pptx", "key"].includes(extension)) return "pptx";
+  if (["doc", "docx"].includes(extension)) return "docx";
+  if (["xls", "xlsx"].includes(extension)) return "xlsx";
+  if (extension === "csv") return "csv";
+  if (["html", "htm"].includes(extension)) return "html";
+  if (["js", "jsx", "ts", "tsx", "py", "sql", "css", "json"].includes(extension)) return "code";
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) return "img";
+  if (["mp3", "wav", "m4a", "ogg"].includes(extension)) return "audio";
+  if (["mp4", "mov", "webm"].includes(extension)) return "video";
+  if (["zip", "rar", "7z"].includes(extension)) return "zip";
+  if (extension === "pdf") return "pdf";
+  if (extension === "epub") return "epub";
+  if (extension === "txt") return "txt";
+  return "file";
+}
+
+function sourceIconConfig(kind: SourceKind): SourceIconConfig {
+  const configs: Record<SourceKind, SourceIconConfig> = {
+    audio: { Icon: FileAudio, label: "音频文件" },
+    code: { Icon: FileCode, label: "代码文件" },
+    csv: { Icon: FileCsv, label: "CSV 文件" },
+    docx: { Icon: FileDoc, label: "Word 文档" },
+    epub: { Icon: FileText, label: "EPUB 文档" },
+    file: { Icon: FileIcon, label: "文件" },
+    html: { Icon: FileHtml, label: "HTML 文件" },
+    img: { Icon: FileImage, label: "图片文件" },
+    md: { Icon: FileMd, label: "Markdown 文件" },
+    pdf: { Icon: FilePdf, label: "PDF 文件" },
+    pptx: { Icon: FilePpt, label: "演示文稿" },
+    txt: { Icon: FileText, label: "文本文件" },
+    url: { Icon: GlobeSimple, label: "网页链接" },
+    video: { Icon: FileVideo, label: "视频文件" },
+    xlsx: { Icon: FileXls, label: "表格文件" },
+    zip: { Icon: FileZip, label: "压缩文件" },
+  };
+  return configs[kind];
+}
+
+function formatDate(value?: string | null, withTime = false) {
+  if (!value) return "未记录";
+  return new Date(value).toLocaleString(undefined, {
+    day: "2-digit",
+    hour: withTime ? "2-digit" : undefined,
+    minute: withTime ? "2-digit" : undefined,
+    month: "2-digit",
+    year: "2-digit",
+  });
 }
 
 function compact(text: string, limit = 220) {

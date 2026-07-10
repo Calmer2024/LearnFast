@@ -262,6 +262,71 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedupe
                 ON memories(space_id, source_type, IFNULL(source_id, ''), content_hash);
 
+            CREATE TABLE IF NOT EXISTS plans (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                goal TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                cadence TEXT NOT NULL DEFAULT '',
+                target_level TEXT NOT NULL DEFAULT '',
+                deadline TEXT,
+                assumptions_json TEXT NOT NULL DEFAULT '{}',
+                rationale TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_plans_space_status
+                ON plans(space_id, status, updated_at);
+
+            CREATE TABLE IF NOT EXISTS plan_tasks (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                plan_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                task_type TEXT NOT NULL DEFAULT 'study',
+                status TEXT NOT NULL DEFAULT 'todo',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                due_date TEXT,
+                source_ids_json TEXT NOT NULL DEFAULT '[]',
+                review_prompt TEXT NOT NULL DEFAULT '',
+                recommended_reason TEXT NOT NULL DEFAULT '',
+                order_index INTEGER NOT NULL DEFAULT 0,
+                completed_at TEXT,
+                last_review_message_id TEXT,
+                review_result TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(plan_id) REFERENCES plans(id) ON DELETE CASCADE,
+                FOREIGN KEY(last_review_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_plan_tasks_plan_order
+                ON plan_tasks(plan_id, order_index);
+            CREATE INDEX IF NOT EXISTS idx_plan_tasks_space_status
+                ON plan_tasks(space_id, status, due_date);
+
+            CREATE TABLE IF NOT EXISTS plan_task_events (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                plan_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(plan_id) REFERENCES plans(id) ON DELETE CASCADE,
+                FOREIGN KEY(task_id) REFERENCES plan_tasks(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_plan_task_events_task
+                ON plan_task_events(task_id, created_at);
+
             CREATE TABLE IF NOT EXISTS chat_feedback (
                 id TEXT PRIMARY KEY,
                 space_id TEXT NOT NULL,
