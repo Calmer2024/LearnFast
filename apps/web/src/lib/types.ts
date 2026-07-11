@@ -68,6 +68,7 @@ export type Citation = {
   heading_path: string[];
   locator: string;
   quote_snapshot: string;
+  text?: string;
   score: number;
 };
 

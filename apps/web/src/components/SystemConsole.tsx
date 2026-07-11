@@ -173,8 +173,8 @@ export function SystemConsole() {
             ))}
             {logs.length === 0 && !error && (
               <div className="empty console-empty">
-                <h3>还没有核心日志</h3>
-                <p>执行上传、索引、问答、检索或模型测试后，这里会显示系统处理过程。</p>
+                <h3>控制台现在很安静</h3>
+                <p>上传、索引、问答或模型测试开始后，小书会把处理过程放到这里。</p>
               </div>
             )}
             <div ref={endRef} />

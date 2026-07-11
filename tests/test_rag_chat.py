@@ -27,7 +27,7 @@ def main() -> int:
             create_memory,
             delete_memory,
         )
-        from learnfast.services.rag_chat import retrieve_for_question, stream_answer
+        from learnfast.services.rag_chat import citation_response, retrieve_for_question, stream_answer
 
         init_db()
         now = utc_now()
@@ -109,6 +109,10 @@ SQL joins combine rows across tables with matching keys.
         assert trace.hyde_document
         assert all(citation.source_id == pandas_source for citation in citations)
         assert all("假设学习资料" not in citation.quote_snapshot for citation in citations)
+        citation_payload = citation_response(citations[0])
+        assert citation_payload["text"] == citations[0].text
+        assert "Pandas cleaning includes" in citation_payload["text"]
+        assert citation_payload["quote_snapshot"]
 
         answer = "".join(stream_answer("What are pandas cleaning steps?", citations, trace))
         assert "Pandas Notes" in answer

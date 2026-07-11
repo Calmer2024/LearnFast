@@ -96,7 +96,7 @@ export function WorkspacePage() {
             返回空间
           </Link>
         </div>
-        <p className="workspace-goal">{space?.goal || "还没有填写学习目标。"}</p>
+        <p className="workspace-goal">{space?.goal || "还没有填写 README。"}</p>
         <nav className="workspace-nav">
           {sections.map((item) => (
             <button
@@ -134,7 +134,7 @@ function PlaceholderSection({ section }: { section: string }) {
   return (
     <div className="empty large">
       <h2>{labels[section] ?? "工作区"}</h2>
-      <p>MVP01-11 已完成本地骨架、模型设置、学习空间、资料导入、索引、问答、笔记、记忆、计划、复习问答、报告、搜索和导出闭环。这个入口已预留给后续阶段。</p>
+      <p>这个入口还在安静准备中，之后会和当前知识库一起长出更多能力。</p>
     </div>
   );
 }

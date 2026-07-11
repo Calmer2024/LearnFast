@@ -15,6 +15,9 @@ from learnfast.services.model_providers import PROVIDERS
 LOCAL_EMBEDDING_PROVIDER = "local_hash"
 LOCAL_EMBEDDING_MODEL = "local-hash-v1"
 LOCAL_EMBEDDING_DIM = 384
+REMOTE_EMBEDDING_BATCH_SIZE = 10
+LEGACY_REMOTE_EMBEDDING_BATCH_SIZE = 25
+MAX_ERROR_BODY_CHARS = 600
 
 
 class EmbeddingError(Exception):
@@ -77,8 +80,9 @@ def _embed_remote(texts: list[str], config: RemoteEmbeddingConfig) -> EmbeddingB
         return EmbeddingBatch(config.provider_id, config.model, [])
 
     vectors: list[list[float]] = []
-    for start in range(0, len(texts), 32):
-        batch = texts[start : start + 32]
+    batch_size = _remote_batch_size(config.model)
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start : start + batch_size]
         try:
             response = httpx.post(
                 f"{config.base_url}/embeddings",
@@ -86,11 +90,22 @@ def _embed_remote(texts: list[str], config: RemoteEmbeddingConfig) -> EmbeddingB
                     "Authorization": f"Bearer {config.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"model": config.model, "input": batch},
+                json={
+                    "model": config.model,
+                    "input": batch,
+                    "encoding_format": "float",
+                },
                 timeout=45,
             )
             response.raise_for_status()
             payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            detail = _response_error_detail(exc.response)
+            raise EmbeddingError(
+                f"Embedding request failed: {exc}. Provider response: {detail}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise EmbeddingError(f"Embedding request failed: {exc}") from exc
         except Exception as exc:
             raise EmbeddingError(f"Embedding request failed: {exc}") from exc
 
@@ -105,6 +120,23 @@ def _embed_remote(texts: list[str], config: RemoteEmbeddingConfig) -> EmbeddingB
             vectors.append(_normalize([float(value) for value in vector]))
 
     return EmbeddingBatch(config.provider_id, config.model, vectors)
+
+
+def _remote_batch_size(model: str) -> int:
+    normalized = model.strip().lower()
+    if normalized.endswith("-v1") or normalized.endswith("-v2"):
+        return LEGACY_REMOTE_EMBEDDING_BATCH_SIZE
+    return REMOTE_EMBEDDING_BATCH_SIZE
+
+
+def _response_error_detail(response: httpx.Response) -> str:
+    body = response.text.strip()
+    if not body:
+        return f"HTTP {response.status_code}"
+    compact = " ".join(body.split())
+    if len(compact) > MAX_ERROR_BODY_CHARS:
+        compact = f"{compact[:MAX_ERROR_BODY_CHARS].rstrip()}..."
+    return compact
 
 
 def _embed_local(texts: list[str]) -> EmbeddingBatch:

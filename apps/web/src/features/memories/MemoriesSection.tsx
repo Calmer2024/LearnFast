@@ -318,8 +318,8 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
                 ))}
                 {candidates.length === 0 && (
                   <div className="empty memory-empty">
-                    <h3>暂无候选</h3>
-                    <p>新的对话或笔记保存后，会在这里出现可治理的记忆候选。</p>
+                    <h3>还没有记忆候选</h3>
+                    <p>等你保存新的对话或笔记，小书会把值得沉淀的内容递到这里。</p>
                   </div>
                 )}
               </div>
@@ -358,8 +358,8 @@ export function MemoriesSection({ spaceId }: { spaceId: string }) {
                 ))}
                 {memories.length === 0 && (
                   <div className="empty memory-empty">
-                    <h3>暂无长期记忆</h3>
-                    <p>确认候选或手动添加后，长期记忆会参与当前空间的新问答。</p>
+                    <h3>长期记忆还在等第一片叶子</h3>
+                    <p>确认候选或手动添加后，小书就会带着这些记忆参与问答。</p>
                   </div>
                 )}
               </div>

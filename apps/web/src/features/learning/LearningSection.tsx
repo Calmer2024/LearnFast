@@ -1,13 +1,16 @@
 import {
   BookmarkSimple,
+  CaretDown,
   CheckSquare,
+  Check,
+  CopySimple,
   SidebarSimple,
   PaperPlaneTilt,
   ThumbsDown,
   ThumbsUp,
   XSquare,
 } from "@phosphor-icons/react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
@@ -38,6 +41,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [feedbackMessageIds, setFeedbackMessageIds] = useState<Set<string>>(new Set());
+  const [copiedMessageIds, setCopiedMessageIds] = useState<Set<string>>(new Set());
   const endRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const loadedReviewKeyRef = useRef("");
@@ -146,7 +150,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
       setMessages((current) =>
         current.map((message) =>
           message.id === event.message_id
-            ? { ...message, citations: event.citations, context_snapshot: event.search }
+            ? { ...message, context_snapshot: event.search }
             : message,
         ),
       );
@@ -221,6 +225,25 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
     }
   };
 
+  const copyAnswer = async (message: ChatMessage) => {
+    if (!message.content.trim()) return;
+    await navigator.clipboard.writeText(message.content);
+    setCopiedMessageIds((current) => new Set(current).add(message.id));
+    window.setTimeout(() => {
+      setCopiedMessageIds((current) => {
+        const next = new Set(current);
+        next.delete(message.id);
+        return next;
+      });
+    }, 1400);
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  };
+
   return (
     <div className={`learning-layout ${contextCollapsed ? "context-collapsed" : ""}`.trim()}>
       <section className="chat-pane">
@@ -237,8 +260,8 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
         <div className="message-list">
           {messages.length === 0 && (
             <div className="empty chat-empty">
-              <h3>开始基于资料提问</h3>
-              <p>选择来源范围后输入问题。回答会默认展示引用，资料不足时会明确说明。</p>
+              <h3>准备好一起学习啦</h3>
+              <p>选好资料范围后，把问题交给小书；它会认真带上引用，不会偷偷编答案。</p>
             </div>
           )}
           {messages.map((message) => (
@@ -254,6 +277,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                   markdown={message.content}
                   className="message-markdown"
                   emptyText="正在生成回答..."
+                  highlightCitations
                 />
               ) : (
                 <div className="message-body">{message.content || "正在生成回答..."}</div>
@@ -263,6 +287,14 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                   <SearchSummary trace={message.context_snapshot} />
                   <CitationList citations={message.citations} />
                   <div className="message-actions">
+                    <button
+                      className="button ghost"
+                      disabled={!message.content}
+                      onClick={() => copyAnswer(message)}
+                    >
+                      {copiedMessageIds.has(message.id) ? <Check size={15} /> : <CopySimple size={15} />}
+                      {copiedMessageIds.has(message.id) ? "已复制" : "复制回答"}
+                    </button>
                     <button
                       className="button ghost"
                       disabled={!message.content || savedMessageIds.has(message.id)}
@@ -303,6 +335,7 @@ export function LearningSection({ spaceId }: { spaceId: string }) {
                 rows={1}
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="例如：这些资料中 Pandas 数据清洗的核心步骤是什么？"
               />
             </div>
@@ -477,19 +510,34 @@ function SearchSummary({ trace }: { trace?: Partial<RetrievalTrace> }) {
 }
 
 function CitationList({ citations }: { citations: Citation[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (!citations.length) return null;
   return (
-    <div className="citation-list">
-      {citations.slice(0, 6).map((citation, index) => (
-        <article className="citation-card" key={`${citation.chunk_id}-${index}`}>
-          <div className="chunk-meta">
-            <strong>[{index + 1}] {citation.source_type === "note" ? "笔记" : "资料"}：{citation.source_title}</strong>
-            <span>{citation.heading_path.join(" / ") || "未命名片段"}</span>
-            <span>{citation.locator}</span>
-          </div>
-          <p>{citation.quote_snapshot}</p>
-        </article>
-      ))}
+    <div className={`citation-panel ${expanded ? "expanded" : ""}`.trim()}>
+      <button className="citation-panel-toggle" onClick={() => setExpanded((current) => !current)} type="button">
+        <span>
+          <strong>引用来源</strong>
+          <small>{citations.length} 个候选片段</small>
+        </span>
+        <CaretDown size={15} />
+      </button>
+      {expanded && (
+        <div className="citation-list">
+          {citations.map((citation, index) => (
+            <article className="citation-card" key={`${citation.chunk_id}-${index}`}>
+              <div className="chunk-meta">
+                <strong>
+                  <span className="citation-ref">[{index + 1}]</span>
+                  {citation.source_type === "note" ? "笔记" : "资料"}：{citation.source_title}
+                </strong>
+                <span>{citation.heading_path.join(" / ") || "未命名片段"}</span>
+                <span>{citation.locator}</span>
+              </div>
+              <p>{citation.text || citation.quote_snapshot}</p>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -791,6 +791,7 @@ def _citation_row_response(row: dict) -> dict:
         "heading_path": json.loads(row["heading_path_json"]),
         "locator": row["locator"],
         "quote_snapshot": row["quote_snapshot"],
+        "text": row["quote_snapshot"],
         "score": round(row["score"], 6),
     }
 

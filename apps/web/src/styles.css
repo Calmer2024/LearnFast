@@ -373,7 +373,7 @@ textarea {
 
 textarea {
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
 }
 
 input::placeholder,
@@ -748,6 +748,7 @@ textarea:focus {
 }
 
 .space-card {
+  cursor: pointer;
   display: grid;
   gap: 11px;
   min-height: 254px;
@@ -764,6 +765,12 @@ textarea:focus {
   background: var(--fresh-green-soft);
   border-color: var(--fresh-green-line);
   transform: translateY(-2px);
+}
+
+.space-card:focus-visible {
+  border-color: var(--fresh-green-line);
+  box-shadow: 0 0 0 3px var(--focus);
+  outline: 0;
 }
 
 .space-card h2,
@@ -784,6 +791,23 @@ textarea:focus {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.space-readme-preview {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.space-readme-preview span {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.space-readme-preview p {
+  color: var(--muted-strong);
+  margin: 0;
 }
 
 .meta-grid {
@@ -867,15 +891,52 @@ textarea:focus {
 }
 
 .empty {
+  --empty-copy-size: 14px;
+  --empty-gap: 8px;
+  --empty-logo-size: 72px;
+  --empty-title-size: 18px;
+
+  align-content: center;
+  align-items: center;
   color: var(--muted-strong);
   display: grid;
-  gap: 6px;
-  padding: 22px;
+  gap: var(--empty-gap);
+  justify-items: center;
+  line-height: 1.45;
+  padding: 44px 24px;
+  position: relative;
   text-align: center;
 }
 
+.empty::before {
+  background: url("/learnfast-logo.png") center / contain no-repeat;
+  content: "";
+  display: block;
+  height: var(--empty-logo-size);
+  margin-bottom: 4px;
+  opacity: 0.88;
+  width: var(--empty-logo-size);
+}
+
+.empty h2,
+.empty h3 {
+  color: var(--text);
+  font-size: var(--empty-title-size);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.28;
+  margin: 0;
+}
+
+.empty p {
+  color: var(--muted-strong);
+  font-size: var(--empty-copy-size);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 520px;
+}
+
 .empty.large {
-  align-items: center;
   min-height: 360px;
   place-content: center;
 }
@@ -1102,6 +1163,48 @@ textarea:focus {
   min-height: 0;
   overflow: auto;
   padding: 2px 4px 4px 0;
+}
+
+.source-drop-surface {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  position: relative;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.source-drop-surface.dragging {
+  background: var(--fresh-green-soft);
+  border-color: var(--fresh-green-line);
+}
+
+.source-drop-overlay {
+  align-items: center;
+  background: rgb(255 255 255 / 0.92);
+  border: 1px solid var(--fresh-green-line);
+  border-radius: 8px;
+  color: var(--fresh-green-text);
+  display: grid;
+  gap: 6px;
+  inset: 10px;
+  justify-items: center;
+  padding: 24px;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  z-index: 6;
+}
+
+.source-drop-overlay strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.source-drop-overlay span {
+  color: var(--muted-strong);
+  font-size: 12px;
 }
 
 .source-card {
@@ -1473,7 +1576,7 @@ textarea:focus {
 
 .modal-form textarea {
   min-height: 112px;
-  resize: vertical;
+  resize: none;
 }
 
 .provider-list {
@@ -1830,14 +1933,63 @@ textarea:focus {
   width: 14px;
 }
 
-.chat-message .message-markdown pre {
-  font-size: 11px;
+.chat-message .message-markdown .markdown-code-shell {
   margin: 10px 0;
+}
+
+.chat-message .message-markdown .markdown-code-shell pre {
+  font-size: 11px;
+  padding: 44px 18px 54px 60px;
 }
 
 .chat-message .message-markdown table {
   font-size: 12px;
   margin: 10px 0;
+}
+
+.markdown-code-copy {
+  align-items: center;
+  background: rgb(255 255 255 / 0.9);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 9px;
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  top: auto;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  z-index: 2;
+}
+
+.markdown-code-copy:hover {
+  background: var(--fresh-green-active);
+  border-color: var(--fresh-green-line);
+  color: var(--fresh-green-text);
+}
+
+.citation-ref {
+  align-items: center;
+  background: var(--fresh-green-active);
+  border: 1px solid var(--fresh-green-line);
+  border-radius: 999px;
+  color: var(--fresh-green-text);
+  display: inline-flex;
+  font-size: 0.86em;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0 2px;
+  min-height: 20px;
+  padding: 3px 7px;
+  vertical-align: baseline;
 }
 
 .message-actions,
@@ -1979,13 +2131,69 @@ textarea:focus {
   padding: 4px 8px;
 }
 
+.citation-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.citation-panel-toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.citation-panel-toggle span {
+  display: grid;
+  gap: 2px;
+}
+
+.citation-panel-toggle strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.citation-panel-toggle small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.citation-panel-toggle svg {
+  color: var(--muted-strong);
+  transition: transform 180ms ease;
+}
+
+.citation-panel.expanded .citation-panel-toggle svg {
+  transform: rotate(180deg);
+}
+
 .citation-list {
+  border-top: 1px solid var(--line);
   display: grid;
   gap: 8px;
+  padding: 10px;
 }
 
 .citation-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
   padding: 10px;
+}
+
+.citation-card .chunk-meta strong {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .notes-hub,
@@ -2121,6 +2329,28 @@ textarea:focus {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  position: relative;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.notes-drop-surface {
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.notes-drop-surface.dragging {
+  background: var(--fresh-green-soft);
+  border-color: var(--fresh-green-line);
+}
+
+.notes-drop-overlay {
+  grid-column: 1 / -1;
+  inset: auto;
+  margin: 10px;
+  position: sticky;
+  top: 10px;
 }
 
 .document-row {
@@ -2165,7 +2395,21 @@ textarea:focus {
 
 .document-row-side {
   justify-content: flex-end;
-  max-width: 260px;
+  max-width: 360px;
+}
+
+.document-row-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.document-row-actions .button {
+  min-height: 30px;
+  padding: 6px 9px;
 }
 
 .document-row-side span,
@@ -2187,9 +2431,19 @@ textarea:focus {
   text-align: right;
 }
 
-.tag-list {
+.document-row-footer {
+  align-items: center;
+  display: flex;
+  gap: 8px;
   grid-column: 1 / -1;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.tag-list {
+  flex: 1 1 auto;
   gap: 6px;
+  min-width: 0;
 }
 
 .document-topbar {
@@ -2847,22 +3101,29 @@ textarea::selection {
   padding: 0.12em 0.34em;
 }
 
-.markdown-renderer pre {
+.markdown-code-shell {
   background: #f7f7f8;
   border: 1px solid #eceef2;
   border-radius: 0;
+  margin: 20px 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.markdown-code-shell pre {
+  background: transparent;
+  border: 0;
   color: #4d566b;
   font-family: var(--mono-font);
   font-size: 15px;
   line-height: 1.9;
-  margin: 20px 0;
+  margin: 0;
   overflow: auto;
-  padding: 52px 28px 20px 88px;
-  position: relative;
+  padding: 52px 28px 58px 88px;
   tab-size: 2;
 }
 
-.markdown-renderer pre::before {
+.markdown-code-shell::before {
   background: #f26b5e;
   border-radius: 999px;
   box-shadow:
@@ -2876,23 +3137,24 @@ textarea::selection {
   width: 13px;
 }
 
-.markdown-renderer pre::after {
+.markdown-code-shell::after {
   color: #777b83;
   content: attr(data-language);
   font-family: var(--mono-font);
   font-size: 12px;
   letter-spacing: 0.08em;
   position: absolute;
+  left: auto;
   right: 20px;
   text-transform: lowercase;
   top: 16px;
 }
 
-.markdown-renderer pre:not([data-language])::after {
+.markdown-code-shell:not([data-language])::after {
   content: "code";
 }
 
-.markdown-renderer pre code {
+.markdown-code-shell pre code {
   background: transparent;
   border: 0;
   color: inherit;
@@ -3224,7 +3486,7 @@ textarea::selection {
 
 .app-dialog textarea.app-dialog-input {
   min-height: 116px;
-  resize: vertical;
+  resize: none;
 }
 
 .app-dialog-actions {
@@ -4653,7 +4915,7 @@ textarea::selection {
 }
 
 .ai-plan-modal-form textarea {
-  resize: vertical;
+  resize: none;
 }
 
 .todo-calendar-panel {
@@ -4953,13 +5215,25 @@ textarea::selection {
 }
 
 .report-list-empty {
+  --empty-copy-size: 13px;
+  --empty-gap: 7px;
+  --empty-logo-size: 54px;
+  --empty-title-size: 15px;
+
+  align-items: center;
   background: var(--subtle);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--muted);
-  font-size: 12px;
-  padding: 12px;
+  display: grid;
+  justify-items: center;
+  min-height: 168px;
+  padding: 18px 14px;
   text-align: center;
+}
+
+.report-list-empty p {
+  max-width: 210px;
 }
 
 .search-layout,
@@ -5125,7 +5399,7 @@ textarea::selection {
 
 .candidate-editor textarea {
   min-height: 112px;
-  resize: vertical;
+  resize: none;
 }
 
 .candidate-editor-grid {
@@ -5146,7 +5420,7 @@ textarea::selection {
 
 .manual-memory-form textarea {
   min-height: 86px;
-  resize: vertical;
+  resize: none;
 }
 
 .memory-empty {

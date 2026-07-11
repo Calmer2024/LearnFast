@@ -37,6 +37,7 @@ class CitationCandidate:
     heading_path: list[str]
     locator: str
     quote_snapshot: str
+    text: str
     score: float
 
 
@@ -141,6 +142,7 @@ def citation_response(citation: CitationCandidate) -> dict:
         "heading_path": citation.heading_path,
         "locator": citation.locator,
         "quote_snapshot": citation.quote_snapshot,
+        "text": citation.text,
         "score": round(citation.score, 6),
     }
 
@@ -228,6 +230,7 @@ def _citation_candidate(result: ChunkSearchResult) -> CitationCandidate:
         heading_path=result.heading_path,
         locator=result.locator,
         quote_snapshot=_quote(result.text),
+        text=result.text,
         score=result.score,
     )
 

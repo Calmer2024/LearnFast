@@ -177,8 +177,8 @@ export function ReportsSection({ spaceId }: { spaceId: string }) {
           </>
         ) : (
           <div className="empty large">
-            <h2>暂无报告记录</h2>
-            <p>完成学习行为后即可生成阶段报告。</p>
+            <h2>还没有学习报告</h2>
+            <p>等你积累一点问答、笔记和计划进度，小书就能帮你整理阶段小结。</p>
           </div>
         )}
       </section>
@@ -252,7 +252,12 @@ export function ReportsSection({ spaceId }: { spaceId: string }) {
                 <small>{formatDate(report.updated_at)}</small>
               </button>
             ))}
-            {reports.length === 0 && <div className="report-list-empty">暂无历史报告</div>}
+            {reports.length === 0 && (
+              <div className="empty report-list-empty">
+                <h3>还没有历史报告</h3>
+                <p>小书会等你多学一点再整理。</p>
+              </div>
+            )}
           </div>
         </section>
       </aside>

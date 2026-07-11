@@ -70,7 +70,8 @@ const processingStatuses = new Set([
 
 export function SourcesSection({ spaceId }: { spaceId: string }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const dragDepthRef = useRef(0);
+  const fileDragDepthRef = useRef(0);
+  const boardDragDepthRef = useRef(0);
   const dialog = useAppDialog();
   const [routeParams, setRouteParams] = useSearchParams();
   const [sources, setSources] = useState<Source[]>([]);
@@ -82,6 +83,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [title, setTitle] = useState("");
   const [fileSummary, setFileSummary] = useState("未选择文件");
   const [fileDragActive, setFileDragActive] = useState(false);
+  const [boardDragActive, setBoardDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -186,30 +188,69 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   };
 
   const handleFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    dragDepthRef.current += 1;
+    fileDragDepthRef.current += 1;
     setFileDragActive(true);
   };
 
   const handleFileDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
   };
 
   const handleFileDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setFileDragActive(false);
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (fileDragDepthRef.current === 0) setFileDragActive(false);
   };
 
   const handleFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    dragDepthRef.current = 0;
+    fileDragDepthRef.current = 0;
     setFileDragActive(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+    updateFileSummary(files);
+    void upload(files);
+  };
+
+  const handleBoardDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    boardDragDepthRef.current += 1;
+    setBoardDragActive(true);
+  };
+
+  const handleBoardDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleBoardDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    boardDragDepthRef.current = Math.max(0, boardDragDepthRef.current - 1);
+    if (boardDragDepthRef.current === 0) setBoardDragActive(false);
+  };
+
+  const handleBoardDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDroppedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    boardDragDepthRef.current = 0;
+    setBoardDragActive(false);
     const files = Array.from(event.dataTransfer.files);
     if (files.length === 0) return;
     updateFileSummary(files);
@@ -373,8 +414,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                     ))}
                     {chunks.length === 0 && (
                       <div className="empty">
-                        <h3>暂时没有 chunk</h3>
-                        <p>资料索引完成后会在这里列出全部片段。</p>
+                        <h3>片段还在路上</h3>
+                        <p>等资料索引完成，小书会把拆好的片段整整齐齐放在这里。</p>
                       </div>
                     )}
                   </div>
@@ -382,8 +423,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               </>
             ) : (
               <div className="empty large source-preview-empty">
-                <h3>Markdown 尚未可用</h3>
-                <p>资料处理完成后会在这里展示转换结果。</p>
+                <h3>Markdown 还没准备好</h3>
+                <p>小书正在等资料处理完成，马上就能在这里读到转换结果。</p>
               </div>
             )}
           </section>
@@ -431,7 +472,20 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               <span className="source-count">{visibleSources.length} / {sources.length} 个资料</span>
             </div>
 
-            <div className="source-card-grid">
+            <div
+              className={`source-card-grid source-drop-surface ${boardDragActive ? "dragging" : ""}`.trim()}
+              onDragEnter={handleBoardDragEnter}
+              onDragLeave={handleBoardDragLeave}
+              onDragOver={handleBoardDragOver}
+              onDrop={handleBoardDrop}
+            >
+              {boardDragActive && (
+                <div className="source-drop-overlay">
+                  <UploadSimple size={26} />
+                  <strong>松开即可导入资料</strong>
+                  <span>多个文件会一起上传、转换成 Markdown 并写入索引。</span>
+                </div>
+              )}
               {visibleSources.map((source) => {
                 const kind = sourceKind(source);
                 const icon = sourceIconConfig(kind);
@@ -502,14 +556,14 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               })}
               {sources.length === 0 && (
                 <div className="empty source-grid-empty">
-                  <h3>还没有资料</h3>
-                  <p>点击右上角导入资料，系统会转成 Markdown 供后续问答使用。</p>
+                  <h3>这里还没有资料</h3>
+                  <p>把文件轻轻拖进来，小书会帮你转成 Markdown，之后就能一起问答啦。</p>
                 </div>
               )}
               {sources.length > 0 && visibleSources.length === 0 && (
                 <div className="empty source-grid-empty">
-                  <h3>没有匹配的资料</h3>
-                  <p>换一个关键词，或清空搜索查看全部资料。</p>
+                  <h3>暂时没找到</h3>
+                  <p>换个关键词试试，或者清空搜索，让小书把所有资料都摆出来。</p>
                 </div>
               )}
             </div>
@@ -662,4 +716,8 @@ function formatDate(value?: string | null, withTime = false) {
 function compact(text: string, limit = 220) {
   const value = text.replace(/\s+/g, " ").trim();
   return value.length > limit ? `${value.slice(0, limit).trim()}...` : value;
+}
+
+function hasDroppedFiles(event: DragEvent<HTMLElement>) {
+  return Array.from(event.dataTransfer.types).includes("Files");
 }

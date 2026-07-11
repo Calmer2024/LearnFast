@@ -223,27 +223,31 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
     }
   };
 
-  const handleNoteUploadDragEnter = (event: DragEvent<HTMLDivElement>) => {
+  const handleNoteUploadDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     noteUploadDragDepthRef.current += 1;
     setNoteUploadDragActive(true);
   };
 
-  const handleNoteUploadDragOver = (event: DragEvent<HTMLDivElement>) => {
+  const handleNoteUploadDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
   };
 
-  const handleNoteUploadDragLeave = (event: DragEvent<HTMLDivElement>) => {
+  const handleNoteUploadDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     noteUploadDragDepthRef.current = Math.max(0, noteUploadDragDepthRef.current - 1);
     if (noteUploadDragDepthRef.current === 0) setNoteUploadDragActive(false);
   };
 
-  const handleNoteUploadDrop = (event: DragEvent<HTMLDivElement>) => {
+  const handleNoteUploadDrop = (event: DragEvent<HTMLElement>) => {
+    if (!hasDroppedFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     noteUploadDragDepthRef.current = 0;
@@ -253,9 +257,8 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
     void uploadMarkdownNotes(files);
   };
 
-  const deleteActiveNote = async () => {
-    if (!activeNoteId) return;
-    const noteTitle = title || activeNote?.title || "未命名笔记";
+  const deleteNote = async (note: Note) => {
+    const noteTitle = note.title || "未命名笔记";
     const deleteAssociatedMemories = await dialog.confirm({
       title: "同步删除关联记忆？",
       body: `删除笔记“${noteTitle}”前，是否同步删除由这条笔记生成的关联记忆？`,
@@ -274,9 +277,11 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
     setError(null);
     setNotice(null);
     try {
-      await api.deleteNote(spaceId, activeNoteId, deleteAssociatedMemories);
-      setView("library");
-      setActiveNoteId(null);
+      await api.deleteNote(spaceId, note.id, deleteAssociatedMemories);
+      if (activeNoteId === note.id) {
+        setView("library");
+        setActiveNoteId(null);
+      }
       await loadNotes();
       setNotice(
         deleteAssociatedMemories
@@ -288,12 +293,11 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
     }
   };
 
-  const exportActiveNote = async () => {
-    if (!activeNoteId) return;
+  const exportNote = async (note: Note) => {
     setError(null);
     setNotice(null);
     try {
-      const result = await api.exportNoteMarkdown(spaceId, activeNoteId);
+      const result = await api.exportNoteMarkdown(spaceId, note.id);
       const blob = new Blob([result.markdown], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -323,18 +327,6 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
             {activeNote && <span>{new Date(activeNote.updated_at).toLocaleString()}</span>}
           </div>
           <div className="document-actions">
-            {activeNoteId && (
-              <button className="button ghost" type="button" onClick={exportActiveNote}>
-                <DownloadSimple size={15} />
-                导出
-              </button>
-            )}
-            {activeNoteId && (
-              <button className="button ghost danger-text" type="button" onClick={deleteActiveNote}>
-                <Trash size={15} />
-                删除
-              </button>
-            )}
             <button className="button" disabled={saving || !markdown.trim()}>
               <FloppyDisk size={15} />
               {saving ? "保存中..." : "保存"}
@@ -410,7 +402,6 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
               <FileArrowUp size={15} />
               上传 .md
             </button>
-            <span>可拖拽多个文件</span>
           </div>
           <button className="button" type="button" onClick={startNewNote}>
             <Plus size={15} />
@@ -456,7 +447,20 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
         </label>
       </section>
 
-      <section className="document-list">
+      <section
+        className={`document-list notes-drop-surface ${noteUploadDragActive ? "dragging" : ""}`.trim()}
+        onDragEnter={handleNoteUploadDragEnter}
+        onDragLeave={handleNoteUploadDragLeave}
+        onDragOver={handleNoteUploadDragOver}
+        onDrop={handleNoteUploadDrop}
+      >
+        {noteUploadDragActive && (
+          <div className="source-drop-overlay notes-drop-overlay">
+            <FileArrowUp size={26} />
+            <strong>松开即可导入笔记</strong>
+            <span>多个 Markdown 文件会一起进入笔记库。</span>
+          </div>
+        )}
         {visibleNotes.map((note) => (
           <article className="document-row" key={note.id} onClick={() => openNote(note)}>
             <div>
@@ -468,7 +472,7 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
               <span>{note.chunk_count} 个片段</span>
               <time>{new Date(note.updated_at).toLocaleString()}</time>
             </div>
-            {note.tags.length > 0 && (
+            <div className="document-row-footer">
               <div className="tag-list">
                 {note.tags.slice(0, 4).map((tag) => (
                   <span key={tag}>
@@ -477,13 +481,23 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
                   </span>
                 ))}
               </div>
-            )}
+              <div className="document-row-actions" onClick={(event) => event.stopPropagation()}>
+                <button className="button ghost" type="button" onClick={() => exportNote(note)}>
+                  <DownloadSimple size={15} />
+                  导出
+                </button>
+                <button className="button ghost danger-text" type="button" onClick={() => deleteNote(note)}>
+                  <Trash size={15} />
+                  删除
+                </button>
+              </div>
+            </div>
           </article>
         ))}
         {visibleNotes.length === 0 && (
           <div className="empty large">
-            <h3>还没有匹配的笔记</h3>
-            <p>调整筛选条件，上传 `.md`，或新建一篇 Markdown 笔记。</p>
+            <h3>这里还空着呢</h3>
+            <p>拖进几篇 Markdown，或者写下第一片小小的学习灵感。</p>
           </div>
         )}
       </section>
@@ -546,4 +560,8 @@ function compact(text: string, limit = 150) {
 
 function safeFilename(value: string) {
   return value.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "learnfast-note";
+}
+
+function hasDroppedFiles(event: DragEvent<HTMLElement>) {
+  return Array.from(event.dataTransfer.types).includes("Files");
 }

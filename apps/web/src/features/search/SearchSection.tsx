@@ -156,14 +156,14 @@ export function SearchSection({ spaceId }: { spaceId: string }) {
           })}
           {searchedQuery && results.length === 0 && (
             <div className="empty large">
-              <h3>没有匹配结果</h3>
-              <p>换一个关键词或回到资料、笔记和计划页补充内容。</p>
+              <h3>小书暂时没翻到</h3>
+              <p>换个更轻一点的关键词，或者先补充资料和笔记再试试。</p>
             </div>
           )}
           {!searchedQuery && (
             <div className="empty large">
-              <h3>输入关键词开始搜索</h3>
-              <p>统一搜索会返回资料、笔记、记忆和计划任务。</p>
+              <h3>想找什么呀</h3>
+              <p>输入关键词，小书会帮你翻资料、笔记、记忆和计划任务。</p>
             </div>
           )}
         </section>

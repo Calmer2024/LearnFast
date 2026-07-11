@@ -654,31 +654,31 @@ function getTaskViewMeta(view: PlanTaskView, groups: TaskGroups): TaskViewMeta {
     return {
       title: "今天",
       hint: "只保留今天真正要推进的学习任务。",
-      emptyTitle: "今天很干净",
-      emptyText: groups.active.length > 0 ? "从接下来或全部任务里挑一项安排到今天。" : "添加第一条待办，开始一个小步推进。",
+      emptyTitle: "今天清清爽爽",
+      emptyText: groups.active.length > 0 ? "从接下来挑一件小任务放到今天，小书陪你慢慢推进。" : "写下第一件小待办，今天的小书架就开张啦。",
     };
   }
   if (view === "upcoming") {
     return {
       title: "接下来",
       hint: "有截止日期的后续任务，以及尚未安排日期的想法。",
-      emptyTitle: "没有后续安排",
-      emptyText: "给任务设置截止日期后，它会出现在这里。",
+      emptyTitle: "接下来还很安静",
+      emptyText: "给任务排个日期，它就会乖乖来到这里等你。",
     };
   }
   if (view === "done") {
     return {
       title: "已完成",
       hint: "复盘已经完成的学习任务和复习结果。",
-      emptyTitle: "还没有完成记录",
-      emptyText: "完成任务后，这里会形成你的学习推进轨迹。",
+      emptyTitle: "还没有贴上完成小徽章",
+      emptyText: "完成第一项任务后，这里会慢慢长出你的学习足迹。",
     };
   }
   return {
     title: "全部待办",
     hint: "所有未完成任务，按状态、日期和优先级排序。",
-    emptyTitle: "还没有待办",
-    emptyText: "从上方快速添加一项，或者让 AI 帮你拆解学习目标。",
+    emptyTitle: "待办篮子还是空的",
+    emptyText: "加一件小事，或者让 AI 帮你把大目标拆成温柔的步骤。",
   };
 }
 
