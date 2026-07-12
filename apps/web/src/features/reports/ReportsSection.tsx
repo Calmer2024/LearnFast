@@ -9,6 +9,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
+import { TransientNotice } from "../../components/TransientNotice";
 import { api } from "../../lib/api";
 import type { LearningReport, Source } from "../../lib/types";
 
@@ -140,8 +141,8 @@ export function ReportsSection({ spaceId }: { spaceId: string }) {
           </div>
         </div>
 
-        {error && <div className="notice danger">{error}</div>}
-        {notice && <div className="notice success">{notice}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
+        {notice && <TransientNotice message={notice} tone="success" onDismiss={() => setNotice(null)} />}
 
         {selectedReport ? (
           <>

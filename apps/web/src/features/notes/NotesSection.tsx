@@ -15,6 +15,7 @@ import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "reac
 import { useAppDialog } from "../../components/AppDialog";
 import { CustomSelect, type CustomSelectOption } from "../../components/CustomSelect";
 import { RichMarkdownEditor } from "../../components/RichMarkdownEditor";
+import { TransientNotice } from "../../components/TransientNotice";
 import { api } from "../../lib/api";
 import type { Note } from "../../lib/types";
 
@@ -334,8 +335,8 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
           </div>
         </div>
 
-        {error && <div className="notice danger">{error}</div>}
-        {notice && <div className="notice success">{notice}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
+        {notice && <TransientNotice message={notice} tone="success" onDismiss={() => setNotice(null)} />}
 
         <main className="document-stage" ref={documentStageRef}>
           <article className="document-page">
@@ -410,8 +411,8 @@ export function NotesSection({ spaceId }: { spaceId: string }) {
         </div>
       </section>
 
-      {error && <div className="notice danger">{error}</div>}
-      {notice && <div className="notice success">{notice}</div>}
+      {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
+      {notice && <TransientNotice message={notice} tone="success" onDismiss={() => setNotice(null)} />}
 
       <section className="notes-overview">
         <div>

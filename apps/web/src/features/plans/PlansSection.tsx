@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppDialog } from "../../components/AppDialog";
 import { CustomSelect, type CustomSelectOption } from "../../components/CustomSelect";
+import { TransientNotice } from "../../components/TransientNotice";
 import { api } from "../../lib/api";
 import type {
   LearningPlan,
@@ -386,8 +387,8 @@ export function PlansSection({ spaceId }: { spaceId: string }) {
           </div>
         </header>
 
-        {error && <div className="notice danger">{error}</div>}
-        {notice && <div className="notice success">{notice}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
+        {notice && <TransientNotice message={notice} tone="success" onDismiss={() => setNotice(null)} />}
 
         <section className="todo-list-panel">
           <div className="todo-view-tabs" role="tablist" aria-label="待办视图">
@@ -678,7 +679,7 @@ function getTaskViewMeta(view: PlanTaskView, groups: TaskGroups): TaskViewMeta {
     title: "全部待办",
     hint: "所有未完成任务，按状态、日期和优先级排序。",
     emptyTitle: "待办篮子还是空的",
-    emptyText: "加一件小事，或者让 AI 帮你把大目标拆成温柔的步骤。",
+    emptyText: "加一件小事，或者让小书帮进行目标规划。",
   };
 }
 

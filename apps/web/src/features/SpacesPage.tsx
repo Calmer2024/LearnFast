@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppDialog } from "../components/AppDialog";
 import { StatusBadge } from "../components/StatusBadge";
 import { api } from "../lib/api";
+import { TransientNotice } from "../components/TransientNotice";
 import type { Health, Space } from "../lib/types";
 
 export function SpacesPage() {
@@ -114,7 +115,7 @@ export function SpacesPage() {
         </button>
       </section>
 
-      {error && <div className="notice danger">{error}</div>}
+      {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
 
       <section className="toolbar">
         <div className="muted">

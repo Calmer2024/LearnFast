@@ -13,9 +13,12 @@ def utc_now() -> str:
 @contextmanager
 def get_db() -> Iterator[sqlite3.Connection]:
     ensure_data_dirs()
-    conn = sqlite3.connect(database_path())
+    conn = sqlite3.connect(database_path(), timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     try:
         yield conn
         conn.commit()

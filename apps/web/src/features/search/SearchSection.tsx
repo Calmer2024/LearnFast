@@ -11,6 +11,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../../lib/api";
+import { TransientNotice } from "../../components/TransientNotice";
 import type { SearchResult } from "../../lib/types";
 
 const resultLabels: Record<SearchResult["result_type"], string> = {
@@ -92,7 +93,7 @@ export function SearchSection({ spaceId }: { spaceId: string }) {
           </div>
         </div>
 
-        {error && <div className="notice danger">{error}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
 
         <form className="search-composer" onSubmit={runSearch}>
           <label className="search-field large">

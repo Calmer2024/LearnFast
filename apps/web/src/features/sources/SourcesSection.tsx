@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowClockwise,
   CaretRight,
+  CheckSquare,
   File as FileIcon,
   FileArrowUp,
   FileAudio,
@@ -24,6 +25,7 @@ import {
   MagnifyingGlass,
   PencilSimple,
   Power,
+  Square,
   Trash,
   UploadSimple,
   X,
@@ -35,6 +37,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAppDialog } from "../../components/AppDialog";
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { StatusBadge } from "../../components/StatusBadge";
+import { TransientNotice } from "../../components/TransientNotice";
 import { api } from "../../lib/api";
 import type { Source, SourceChunk, SourceFolder } from "../../lib/types";
 
@@ -92,6 +95,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [boardDragActive, setBoardDragActive] = useState(false);
   const [draggedSourceId, setDraggedSourceId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,6 +152,16 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
         .includes(query),
     );
   }, [search, sources, activeFolderId]);
+
+  useEffect(() => {
+    setSelectionMode(false);
+    setSelectedSourceIds(new Set());
+  }, [activeFolderId]);
+
+  useEffect(() => {
+    const sourceIds = new Set(sources.map((source) => source.id));
+    setSelectedSourceIds((current) => new Set([...current].filter((sourceId) => sourceIds.has(sourceId))));
+  }, [sources]);
 
   const createFolder = async () => {
     const name = await dialog.prompt({ title: "新建目录", inputLabel: "目录名称", placeholder: "例如：第一章 基础概念", confirmLabel: "创建" });
@@ -376,6 +391,68 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
     await loadSources();
   };
 
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedSourceIds(new Set());
+  };
+
+  const toggleSourceSelection = (sourceId: string) => {
+    setSelectedSourceIds((current) => {
+      const next = new Set(current);
+      if (next.has(sourceId)) next.delete(sourceId);
+      else next.add(sourceId);
+      return next;
+    });
+  };
+
+  const allVisibleSourcesSelected = visibleSources.length > 0
+    && visibleSources.every((source) => selectedSourceIds.has(source.id));
+
+  const toggleAllVisibleSources = () => {
+    setSelectedSourceIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSourcesSelected) visibleSources.forEach((source) => next.delete(source.id));
+      else visibleSources.forEach((source) => next.add(source.id));
+      return next;
+    });
+  };
+
+  const deleteSelectedSources = async () => {
+    const sourceIds = [...selectedSourceIds];
+    if (sourceIds.length === 0) return;
+    const confirmed = await dialog.confirm({
+      title: `删除已选择的 ${sourceIds.length} 个资料？`,
+      body: "删除后会移除这些资料的索引与详情记录，此操作无法撤销。",
+      confirmLabel: "批量删除",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+
+    setLoading(true);
+    setError(null);
+    const results = await Promise.allSettled(sourceIds.map((sourceId) => api.deleteSource(spaceId, sourceId)));
+    const failedIds = sourceIds.filter((_, index) => results[index].status === "rejected");
+    let refreshFailed = false;
+    try {
+      await loadSources();
+    } catch (exc) {
+      refreshFailed = true;
+      setError(exc instanceof Error ? exc.message : "刷新资料列表失败");
+    } finally {
+      setLoading(false);
+    }
+    if (refreshFailed) return;
+
+    if (failedIds.length > 0) {
+      setSelectedSourceIds(new Set(failedIds));
+      setError(`${sourceIds.length - failedIds.length} 个资料已删除，${failedIds.length} 个删除失败，请重试。`);
+      return;
+    }
+
+    setMessage(`已删除 ${sourceIds.length} 个资料。`);
+    exitSelectionMode();
+  };
+
   const selectedKind = selected ? sourceKind(selected) : "file";
   const selectedIcon = sourceIconConfig(selectedKind);
   const SelectedIcon = selectedIcon.Icon;
@@ -383,8 +460,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   return (
     <div className="sources-layout">
       <section className="sources-board">
-        {error && <div className="notice danger">{error}</div>}
-        {message && <div className="notice success">{message}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
+        {message && <TransientNotice message={message} tone="success" onDismiss={() => setMessage(null)} />}
 
         {selected ? (
           <section className="source-preview-route">
@@ -532,9 +609,26 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                 <span key={folder.id}><CaretRight size={11} /><button className={index === breadcrumbs.length - 1 ? "current" : ""} onClick={() => setActiveFolderId(folder.id)} onDragOver={(event) => { if (draggedSourceId) event.preventDefault(); }} onDrop={(event) => acceptSourceDrop(event, folder.id)} type="button">{folder.name}</button></span>
               ))}
             </nav>
-            <div className="source-library-actions">
-              <button className="button secondary" onClick={createFolder} type="button"><Folder size={16} />新建目录</button>
-              {activeFolderId && <button className="button ghost source-parent-button" onClick={() => setActiveFolderId(folders.find((folder) => folder.id === activeFolderId)?.parent_id ?? null)} type="button"><ArrowLeft size={15} />返回上一级</button>}
+            <div className={`source-library-actions ${selectionMode ? "selecting" : ""}`.trim()}>
+              {selectionMode ? (
+                <div className="source-selection-toolbar">
+                  <button className="button secondary" onClick={toggleAllVisibleSources} type="button">
+                    {allVisibleSourcesSelected ? <CheckSquare size={16} weight="fill" /> : <Square size={16} />}
+                    {allVisibleSourcesSelected ? "取消全选" : "全选当前列表"}
+                  </button>
+                  <span className="source-selection-count">已选择 {selectedSourceIds.size} 个</span>
+                  <button className="button danger" disabled={selectedSourceIds.size === 0 || loading} onClick={deleteSelectedSources} type="button"><Trash size={16} />删除所选</button>
+                  <button className="button ghost" onClick={exitSelectionMode} type="button"><X size={15} />取消</button>
+                </div>
+              ) : (
+                <>
+                  <div className="source-library-primary-actions">
+                    <button className="button secondary" onClick={createFolder} type="button"><Folder size={16} />新建目录</button>
+                    <button className="button secondary" disabled={visibleSources.length === 0} onClick={() => setSelectionMode(true)} type="button"><CheckSquare size={16} />选择</button>
+                  </div>
+                  {activeFolderId && <button className="button ghost source-parent-button" onClick={() => setActiveFolderId(folders.find((folder) => folder.id === activeFolderId)?.parent_id ?? null)} type="button"><ArrowLeft size={15} />返回上一级</button>}
+                </>
+              )}
             </div>
 
             <div
@@ -564,27 +658,36 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                 const CardIcon = icon.Icon;
                 return (
                   <article
-                    aria-label={`打开资料预览：${source.title}`}
-                    className={`source-card source-file-card ${source.enabled ? "" : "disabled"} ${draggedSourceId === source.id ? "dragging-source" : ""}`.trim()}
-                    draggable
+                    aria-label={selectionMode ? `${selectedSourceIds.has(source.id) ? "取消选择" : "选择"}资料：${source.title}` : `打开资料预览：${source.title}`}
+                    aria-pressed={selectionMode ? selectedSourceIds.has(source.id) : undefined}
+                    className={`source-card source-file-card ${source.enabled ? "" : "disabled"} ${draggedSourceId === source.id ? "dragging-source" : ""} ${selectedSourceIds.has(source.id) ? "selected" : ""}`.trim()}
+                    draggable={!selectionMode}
                     key={source.id}
                     onDragEnd={() => { setDraggedSourceId(null); setDragOverFolderId(null); }}
                     onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-learnfast-source", source.id); setDraggedSourceId(source.id); }}
-                    onClick={() => openSource(source)}
+                    onClick={() => selectionMode ? toggleSourceSelection(source.id) : openSource(source)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        openSource(source);
+                        if (selectionMode) toggleSourceSelection(source.id);
+                        else openSource(source);
                       }
                     }}
                     role="button"
                     tabIndex={0}
                   >
                     <div className="source-card-top">
-                      <span className={`source-file-icon source-file-${kind}`} title={icon.label}>
-                        <CardIcon size={24} weight="duotone" aria-hidden="true" />
-                        <span className="sr-only">{icon.label}</span>
-                      </span>
+                      <div className="source-card-leading">
+                        {selectionMode && (
+                          <span className={`source-card-selector ${selectedSourceIds.has(source.id) ? "selected" : ""}`} aria-hidden="true">
+                            {selectedSourceIds.has(source.id) ? <CheckSquare size={20} weight="fill" /> : <Square size={20} />}
+                          </span>
+                        )}
+                        <span className={`source-file-icon source-file-${kind}`} title={icon.label}>
+                          <CardIcon size={24} weight="duotone" aria-hidden="true" />
+                          <span className="sr-only">{icon.label}</span>
+                        </span>
+                      </div>
                       <StatusBadge status={source.status} />
                     </div>
                     <div className="source-card-body">
@@ -606,7 +709,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                       </div>
                     </dl>
                     {source.error_message && <p className="error-line">{source.error_message}</p>}
-                    <div className="source-card-actions" onClick={(event) => event.stopPropagation()}>
+                    {!selectionMode && <div className="source-card-actions" onClick={(event) => event.stopPropagation()}>
                       <button className="button ghost" type="button" onClick={() => openSource(source)}>
                         <CardIcon size={15} weight="duotone" />
                         预览
@@ -625,7 +728,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                         <Trash size={15} />
                         删除
                       </button>
-                    </div>
+                    </div>}
                   </article>
                 );
               })}
@@ -635,7 +738,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                   <p>把文件轻轻拖进来，小书会帮你转成 Markdown，之后就能一起问答啦。</p>
                 </div>
               )}
-              {sources.length > 0 && visibleSources.length === 0 && (
+              {sources.length > 0 && currentFolders.length === 0 && visibleSources.length === 0 && (
                 <div className="empty source-grid-empty">
                   <h3>暂时没找到</h3>
                   <p>换个关键词试试，或者清空搜索，让小书把所有资料都摆出来。</p>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { api } from "../lib/api";
+import { TransientNotice } from "./TransientNotice";
 import type { SystemLog } from "../lib/types";
 
 const categoryLabels: Record<string, string> = {
@@ -143,7 +144,7 @@ export function SystemConsole() {
             </div>
           </header>
 
-          {error && <div className="notice danger">{error}</div>}
+          {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
           {newLogCount > 0 && (
             <button className="console-jump button secondary" type="button" onClick={scrollToLatest}>
               <ArrowDown size={15} />

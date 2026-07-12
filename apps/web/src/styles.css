@@ -1159,6 +1159,7 @@ textarea:focus {
   display: grid;
   flex: 1;
   gap: 12px;
+  grid-auto-rows: max-content;
   grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
   min-height: 0;
   overflow: auto;
@@ -1199,6 +1200,21 @@ textarea:focus {
 .source-breadcrumbs button.current { color: var(--text); font-weight: 650; }
 
 .source-library-actions { gap: 8px; margin: 0 0 14px; flex-wrap: wrap; justify-content: space-between; }
+.source-library-actions.selecting { align-items: stretch; }
+.source-library-primary-actions,
+.source-selection-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.source-selection-toolbar { width: 100%; }
+.source-selection-count {
+  color: var(--muted-strong);
+  font-size: 12px;
+  margin: 0 auto 0 4px;
+  white-space: nowrap;
+}
 .source-parent-button { margin-left: auto; }
 
 .source-folder-card {
@@ -1218,7 +1234,16 @@ textarea:focus {
 .source-folder-card .source-card-body h3 { font-weight: 650; margin-bottom: 3px; }
 .source-folder-actions { align-items: center; display: flex; gap: 5px; justify-content: center; margin-top: auto; }
 .source-folder-actions .icon-button { height: 30px; width: 30px; }
-.source-file-card { cursor: grab; }
+.source-card.source-file-card {
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+}
+.source-card.source-file-card.selected {
+  background: var(--fresh-green-active);
+  border-color: var(--fresh-green-line);
+  box-shadow: inset 0 0 0 1px var(--fresh-green-line);
+}
 .source-file-card:active { cursor: grabbing; }
 .source-file-card.dragging-source { opacity: 0.48; transform: scale(0.985); }
 .upload-location { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; color: var(--primary); font-size: 12px; font-weight: 650; }
@@ -1295,6 +1320,7 @@ textarea:focus {
 
 .source-card-top,
 .source-card-actions,
+.source-card-leading,
 .source-route-head,
 .source-preview-head,
 .source-import-modal-head {
@@ -2489,6 +2515,22 @@ textarea:focus {
   grid-column: 1 / -1;
   justify-content: space-between;
   min-width: 0;
+}
+
+.source-card-leading {
+  justify-content: flex-start;
+}
+
+.source-card-selector {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.source-card-selector.selected {
+  color: var(--fresh-green-strong);
 }
 
 .tag-list {

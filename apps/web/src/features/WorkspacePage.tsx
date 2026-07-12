@@ -14,6 +14,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { StatusBadge } from "../components/StatusBadge";
 import { api } from "../lib/api";
+import { TransientNotice } from "../components/TransientNotice";
 import type { Space } from "../lib/types";
 import { LearningSection } from "./learning/LearningSection";
 import { MemoriesSection } from "./memories/MemoriesSection";
@@ -115,7 +116,7 @@ export function WorkspacePage() {
         </button>
       </aside>
       <section className="workspace-main">
-        {error && <div className="notice danger">{error}</div>}
+        {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
         {content}
       </section>
     </main>

@@ -47,10 +47,16 @@ def markdown_source_dir(space_id: str, source_id: str) -> Path:
 
 
 def remove_paths(paths: Iterable[str | None]) -> None:
+    root = data_dir().resolve()
     for value in paths:
         if not value:
             continue
-        path = Path(value)
+        path = Path(value).expanduser().resolve(strict=False)
+        try:
+            path.relative_to(root)
+        except ValueError:
+            # Database paths are untrusted input; never delete outside the app data directory.
+            continue
         if path.is_file():
             path.unlink(missing_ok=True)
         elif path.is_dir():

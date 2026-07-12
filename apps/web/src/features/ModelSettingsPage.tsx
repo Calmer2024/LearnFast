@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { ComboboxInput } from "../components/ComboboxInput";
 import { StatusBadge } from "../components/StatusBadge";
+import { TransientNotice } from "../components/TransientNotice";
 import { api } from "../lib/api";
 import type { ModelProvider } from "../lib/types";
 
@@ -107,8 +108,8 @@ export function ModelSettingsPage() {
       <div className="notice">
         聊天模型和向量模型分开配置，可以使用不同 provider。下拉框已内置当前厂商兼容 API 支持的模型，也可以直接输入新模型名。
       </div>
-      {message && <div className="notice success">{message}</div>}
-      {error && <div className="notice danger">{error}</div>}
+      {message && <TransientNotice message={message} tone="success" onDismiss={() => setMessage(null)} />}
+      {error && <TransientNotice message={error} tone="danger" onDismiss={() => setError(null)} />}
 
       <section className="provider-list">
         {chatProvider && drafts[chatProvider.id] && (
