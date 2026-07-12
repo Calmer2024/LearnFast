@@ -1165,6 +1165,64 @@ textarea:focus {
   padding: 2px 4px 4px 0;
 }
 
+.source-breadcrumbs,
+.source-breadcrumbs span,
+.source-library-actions {
+  display: flex;
+  align-items: center;
+}
+
+.source-breadcrumbs {
+  min-height: 30px;
+  gap: 1px;
+  margin: 5px 0 12px;
+  padding: 0 2px;
+  overflow-x: auto;
+  font-size: clamp(10px, 0.72vw, 12px);
+}
+
+.source-breadcrumbs span { gap: 1px; color: var(--muted); }
+.source-breadcrumbs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.source-breadcrumbs button:hover { background: var(--fresh-green-soft); color: var(--text); }
+.source-breadcrumbs button.current { color: var(--text); font-weight: 650; }
+
+.source-library-actions { gap: 8px; margin: 0 0 14px; flex-wrap: wrap; justify-content: space-between; }
+.source-parent-button { margin-left: auto; }
+
+.source-folder-card {
+  align-content: start;
+  justify-items: center;
+  min-height: 204px;
+  padding: 17px 16px 13px;
+  background: #fff;
+  border-color: var(--line);
+}
+.source-folder-card:hover { background: #fffdf7; border-color: #e7bd55; }
+.source-folder-card.drop-target { background: #fff9e9; border-color: #dcae39; box-shadow: 0 0 0 3px rgb(235 184 56 / 0.16); transform: translateY(-2px); }
+.source-folder-visual { height: 86px; position: relative; width: min(142px, 82%); margin-top: 2px; }
+.source-folder-visual::before { background: #f5b91f; border-radius: 9px 11px 0 0; content: ""; height: 24px; left: 0; position: absolute; top: 0; width: 48%; }
+.source-folder-visual span { background: linear-gradient(180deg, #ffe38d 0%, #ffd665 100%); border: 1px solid #e5b438; border-radius: 8px 9px 9px 9px; box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.38), 0 5px 10px rgb(185 134 20 / 0.13); inset: 18px 0 0; position: absolute; }
+.source-folder-card .source-card-body { text-align: center; width: 100%; }
+.source-folder-card .source-card-body h3 { font-weight: 650; margin-bottom: 3px; }
+.source-folder-actions { align-items: center; display: flex; gap: 5px; justify-content: center; margin-top: auto; }
+.source-folder-actions .icon-button { height: 30px; width: 30px; }
+.source-file-card { cursor: grab; }
+.source-file-card:active { cursor: grabbing; }
+.source-file-card.dragging-source { opacity: 0.48; transform: scale(0.985); }
+.upload-location { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; color: var(--primary); font-size: 12px; font-weight: 650; }
+
 .source-drop-surface {
   border: 1px solid transparent;
   border-radius: 8px;

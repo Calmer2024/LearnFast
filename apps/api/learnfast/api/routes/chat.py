@@ -552,7 +552,9 @@ def _chat_events(
         )
 
         answer_parts: list[str] = []
-        for chunk in stream_answer(question, citations, trace, memories):
+        from learnfast.api.routes.preferences import get_learning_preferences
+        preferences = get_learning_preferences(space_id)
+        for chunk in stream_answer(question, citations, trace, memories, preferences):
             answer_parts.append(chunk)
             yield _event(
                 {

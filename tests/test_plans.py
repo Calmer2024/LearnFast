@@ -126,10 +126,28 @@ def main() -> int:
                 """,
                 (space_id, now),
             )
+            conn.execute(
+                """
+                INSERT INTO source_chunks (
+                    id, space_id, source_id, version_id, ordinal,
+                    heading_path_json, locator, text, content_hash, char_count,
+                    embedding_provider, embedding_model, embedding_dim,
+                    embedding_json, created_at
+                ) VALUES (
+                    'chunk-cleaning-missing', ?, 'source-cleaning', 'v1', 0,
+                    '["缺失值处理与插补策略"]', 'section:missing-values',
+                    '比较 dropna、fillna 与统计插补的适用条件。', 'hash-plan-topic', 30,
+                    'local', 'hash', 3, '[0,0,0]', ?
+                )
+                """,
+                (space_id, now),
+            )
 
         source_based = post_generate_plan(space_id, PlanGenerateIn())
         assert source_based["id"] != initial["id"]
         assert source_based["assumptions"]["source_count"] == 1
+        assert source_based["assumptions"]["generation_mode"] == "adaptive_local_content_v1"
+        assert any("缺失值处理与插补策略" in task["title"] for task in source_based["tasks"])
         assert any(task["source_ids"] == ["source-cleaning"] for task in source_based["tasks"])
         review_task = next(task for task in source_based["tasks"] if task["task_type"] == "review")
         reviewed = post_review_result(

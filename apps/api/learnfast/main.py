@@ -8,6 +8,7 @@ from learnfast.api.routes import (
     memories,
     model_settings,
     plans,
+    preferences,
     reports,
     search,
     sources,
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix=settings.api_prefix)
     app.include_router(chat.router, prefix=settings.api_prefix)
     app.include_router(plans.router, prefix=settings.api_prefix)
+    app.include_router(preferences.router, prefix=settings.api_prefix)
     app.include_router(reports.router, prefix=settings.api_prefix)
     app.include_router(exports.router, prefix=settings.api_prefix)
     app.include_router(memories.router, prefix=settings.api_prefix)

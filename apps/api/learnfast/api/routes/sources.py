@@ -3,7 +3,8 @@ from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, HttpUrl
 
 from learnfast.api.routes.spaces import require_space
@@ -37,6 +38,17 @@ class UrlImportIn(BaseModel):
 class SourceUpdateIn(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     enabled: bool | None = None
+    folder_id: str | None = None
+
+
+class FolderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: str | None = None
+
+
+class FolderUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    parent_id: str | None = None
 
 
 def _source_response(row: dict) -> dict:
@@ -196,6 +208,12 @@ def process_source_job(space_id: str, source_id: str, job_id: str) -> None:
         )
         conversion_input = source["raw_path"] if source["raw_path"] else source["origin"]
         markdown = convert_to_markdown(conversion_input)
+        if source["type"] in {"png", "jpg", "jpeg", "webp", "gif"}:
+            image_url = f"/api/spaces/{space_id}/sources/{source_id}/content"
+            extracted = markdown.strip()
+            markdown = f"# {source['title']}\n\n![{source['title']}]({image_url})"
+            if extracted:
+                markdown += f"\n\n## 图片识别内容\n\n{extracted}"
         markdown_file = markdown_source_dir(space_id, source_id) / "current.md"
         markdown_file.write_text(markdown, encoding="utf-8")
         _update_job(job_id, "running", 55, "Saving Markdown preview.")
@@ -329,13 +347,83 @@ def list_sources(space_id: str) -> list[dict]:
     return [_source_response(row) for row in rows]
 
 
+def _folder(space_id: str, folder_id: str) -> dict:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM source_folders WHERE id = ? AND space_id = ?",
+            (folder_id, space_id),
+        ).fetchone()
+    if not row:
+        raise not_found("Source folder not found.")
+    return dict(row)
+
+
+@router.get("/spaces/{space_id}/source-folders")
+def list_source_folders(space_id: str) -> list[dict]:
+    require_space(space_id)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM source_folders WHERE space_id = ? ORDER BY name COLLATE NOCASE",
+            (space_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@router.post("/spaces/{space_id}/source-folders")
+def create_source_folder(space_id: str, payload: FolderIn) -> dict:
+    require_space(space_id)
+    if payload.parent_id:
+        _folder(space_id, payload.parent_id)
+    folder_id, now = str(uuid4()), utc_now()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO source_folders (id, space_id, parent_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (folder_id, space_id, payload.parent_id, payload.name.strip(), now, now),
+        )
+    return _folder(space_id, folder_id)
+
+
+@router.patch("/spaces/{space_id}/source-folders/{folder_id}")
+def update_source_folder(space_id: str, folder_id: str, payload: FolderUpdateIn) -> dict:
+    current = _folder(space_id, folder_id)
+    values = payload.model_dump(exclude_unset=True)
+    parent_id = values.get("parent_id", current["parent_id"])
+    if parent_id == folder_id:
+        raise bad_request("A folder cannot contain itself.")
+    if parent_id:
+        cursor = _folder(space_id, parent_id)
+        while cursor.get("parent_id"):
+            if cursor["parent_id"] == folder_id:
+                raise bad_request("A folder cannot be moved into its descendant.")
+            cursor = _folder(space_id, cursor["parent_id"])
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE source_folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ? AND space_id = ?",
+            (values.get("name", current["name"]).strip(), parent_id, utc_now(), folder_id, space_id),
+        )
+    return _folder(space_id, folder_id)
+
+
+@router.delete("/spaces/{space_id}/source-folders/{folder_id}")
+def delete_source_folder(space_id: str, folder_id: str) -> dict:
+    _folder(space_id, folder_id)
+    with get_db() as conn:
+        conn.execute("UPDATE sources SET folder_id = NULL WHERE space_id = ? AND folder_id = ?", (space_id, folder_id))
+        conn.execute("UPDATE source_folders SET parent_id = NULL WHERE space_id = ? AND parent_id = ?", (space_id, folder_id))
+        conn.execute("DELETE FROM source_folders WHERE id = ? AND space_id = ?", (folder_id, space_id))
+    return {"deleted": True, "id": folder_id}
+
+
 @router.post("/spaces/{space_id}/sources/files")
 async def upload_files(
     space_id: str,
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    folder_id: str | None = Form(default=None),
 ) -> list[dict]:
     require_space(space_id)
+    if folder_id:
+        _folder(space_id, folder_id)
     if len(files) > MAX_BATCH_UPLOAD_FILES:
         raise bad_request(f"Upload at most {MAX_BATCH_UPLOAD_FILES} files at once.")
     _ensure_source_capacity(space_id, len(files))
@@ -346,22 +434,28 @@ async def upload_files(
         suffix = Path(filename).suffix.lower()
         if suffix not in ALLOWED_FILE_EXTENSIONS:
             raise bad_request(f"Unsupported file type: {suffix or 'unknown'}.")
-        content = await upload.read()
-        if len(content) > MAX_FILE_SIZE_BYTES:
-            raise bad_request(f"{filename} exceeds the {MAX_FILE_SIZE_MB} MB MVP limit.")
-
         source_id = str(uuid4())
         raw_path = raw_source_dir(space_id, source_id) / filename
-        raw_path.write_bytes(content)
+        digest = hashlib.sha256()
+        size = 0
+        with raw_path.open("wb") as destination:
+            while chunk := await upload.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE_BYTES:
+                    destination.close()
+                    raw_path.unlink(missing_ok=True)
+                    raise bad_request(f"{filename} exceeds the {MAX_FILE_SIZE_MB} MB limit.")
+                digest.update(chunk)
+                destination.write(chunk)
         now = utc_now()
         with get_db() as conn:
             conn.execute(
                 """
                 INSERT INTO sources (
                     id, space_id, type, title, origin, status, enabled,
-                    raw_path, checksum, created_at, updated_at
+                    raw_path, checksum, folder_id, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, 'uploaded', 1, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, 'uploaded', 1, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_id,
@@ -370,7 +464,8 @@ async def upload_files(
                     filename,
                     filename,
                     str(raw_path),
-                    _checksum(content),
+                    digest.hexdigest(),
+                    folder_id,
                     now,
                     now,
                 ),
@@ -390,8 +485,8 @@ async def upload_files(
                 "result": "queued",
                 "status": "uploaded",
                 "progress": 0,
-                "file_size_bytes": len(content),
-                "checksum": _checksum(content)[:16],
+                "file_size_bytes": size,
+                "checksum": digest.hexdigest()[:16],
             },
         )
         background_tasks.add_task(process_source_job, space_id, source_id, job_id)
@@ -465,6 +560,16 @@ def get_source_markdown(space_id: str, source_id: str) -> dict:
     }
 
 
+@router.get("/spaces/{space_id}/sources/{source_id}/content")
+def get_source_content(space_id: str, source_id: str):
+    require_space(space_id)
+    source = _get_source(space_id, source_id)
+    path = Path(source.get("raw_path") or "")
+    if not path.is_file():
+        raise not_found("Source file not found.")
+    return FileResponse(path, filename=source["title"], content_disposition_type="inline")
+
+
 @router.get("/spaces/{space_id}/sources/{source_id}/chunks")
 def get_source_chunks(space_id: str, source_id: str) -> list[dict]:
     require_space(space_id)
@@ -487,6 +592,11 @@ def update_source(space_id: str, source_id: str, payload: SourceUpdateIn) -> dic
     if "enabled" in values and values["enabled"] is not None:
         fields.append("enabled = ?")
         params.append(1 if values["enabled"] else 0)
+    if "folder_id" in values:
+        if values["folder_id"]:
+            _folder(space_id, values["folder_id"])
+        fields.append("folder_id = ?")
+        params.append(values["folder_id"])
     fields.append("updated_at = ?")
     params.append(utc_now())
     params.extend([source_id, space_id])

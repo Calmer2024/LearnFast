@@ -8,36 +8,36 @@
 
 ## 1. 架构结论
 
-LearnFast 第一阶段采用本地优先、单用户、模块化单体架构。
+LearnFast 是本地桌面端、单用户、模块化单体产品；这不是阶段性取舍，而是长期产品边界。
 
 核心形态：
 
-- 前端：React + TypeScript + Vite，运行在浏览器或后续桌面壳内。
+- 前端：React + TypeScript + Vite，运行在桌面壳内。
 - 后端：Python + FastAPI，本地启动 HTTP API 和流式问答接口。
 - 数据：SQLite 保存结构化业务数据，文件系统保存原始文件和 Markdown 产物，嵌入式向量库存知识块向量。
 - AI：用户自带模型密钥，通过统一模型适配器调用 LLM、Embedding、视觉、语音等能力。
 - RAG：资料进入统一 Markdown 管线，经过结构化分块、向量化、MQE、HyDE 和引用约束后参与问答。
 - 记忆：每个学习空间独立维护记忆候选、长期记忆、能力状态和计划进度，不跨空间默认共享。
 
-第一阶段不引入云端账号、多租户、远程同步、多人协作、分布式任务队列或微服务。
+产品不建设账号体系或托管服务；桌面进程内运行本地 API、任务调度与数据管线。
 
 ## 2. 已确认产品与技术决策
 
 | 决策项 | 结论 | 架构影响 |
 | --- | --- | --- |
-| 用户形态 | MVP 先做本地/单用户版本 | 不做登录、组织、租户、云端鉴权 |
+| 用户形态 | 本地桌面端、单用户 | 无登录、组织或远端鉴权依赖 |
 | 模型调用 | 允许用户自带模型密钥 | 本地密钥管理、统一模型适配器、调用前展示数据发送范围 |
 | 限制策略 | MVP 文件大小、资料数量、空间数量先由代码硬编码 | 以常量集中管理，后续再产品化配置 |
 | 知识复查 | 先以复习问答和计划任务承载 | 不做独立闪卡系统 |
 | 学习报告 | 用户手动生成 | 不做定时任务和通知系统 |
 | 扩展资料 | 支持网页链接、YouTube、EPub、CSV、Excel | 资料接入层需要统一 URL/文件导入抽象 |
 | 一级入口 | “资料”和“记忆”作为显性一级入口 | 空间内导航固定包含学习、资料、笔记、计划、记忆、报告 |
-| 存储策略 | 本地优先 | 默认数据落本机，外部调用仅限模型请求和网络资料拉取 |
+| 存储策略 | 仅本地持久化 | 数据落本机，外部访问仅限用户主动发起的模型请求和网络资料拉取 |
 | 技术栈 | React + Python | 前后端分离，Python 承担资料处理和 AI 编排 |
 
 ## 3. 架构目标
 
-- 本地优先：用户资料、笔记、计划、记忆和索引默认保存在本机。
+- 仅本机持久化：用户资料、笔记、计划、记忆和索引全部保存在本机。
 - 资料可信：AI 回答可回溯到资料、笔记、记忆或计划上下文。
 - 空间隔离：学习空间是数据隔离边界，所有查询、记忆、计划默认按空间过滤。
 - 可扩展导入：新增资料类型时只扩展导入器和转换器，不改问答主流程。
@@ -256,6 +256,8 @@ apps/web/src/
 | MemoryItem | 长期记忆 | id、space_id、layer、content、source_ref、priority、status |
 | StudyPlan | 学习计划 | id、space_id、title、goal、status |
 | PlanTask | 计划任务 | id、plan_id、title、type、due_at、status、linked_refs |
+| SourceFolder | 资料目录 | id、space_id、parent_id、name；邻接表支持无限层级 |
+| LearningPreference | 教学偏好 | space_id、onboarding_completed、tone、depth、approach、interaction、level、instructions |
 | ReviewRecord | 复习记录 | id、space_id、task_id、topic、result、created_at |
 | Report | 学习报告 | id、space_id、range、markdown、evidence_refs |
 | ModelProviderConfig | 模型配置 | id、provider、capabilities、status、secret_ref |
@@ -298,6 +300,8 @@ sequenceDiagram
 
 ```text
 created -> uploaded/imported -> converting -> converted -> chunking -> indexing -> ready
+
+独立图片文件采用流式写盘和本地文件响应；Markdown 只保存稳定的本地资源 URL。这样避免 Base64 造成约 33% 体积膨胀和大对象反复序列化，浏览器可直接使用磁盘流、条件请求与解码缓存。
                                       |             |            |
                                       v             v            v
                                     failed        failed       failed
@@ -553,7 +557,7 @@ flowchart LR
 
 - 导入网页或 YouTube 时会访问外部网络。
 - 使用用户模型密钥时，选中的资料片段、问题和必要上下文会发送到对应模型服务商。
-- 本地优先不等于完全离线，除非用户关闭外部模型和网络导入。
+- 本地桌面端不等于完全离线：仅当用户主动调用外部模型或导入网络资料时产生网络访问。
 
 ## 19. 测试策略
 

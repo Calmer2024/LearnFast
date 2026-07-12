@@ -67,6 +67,36 @@ def init_db() -> None:
                 indexed_at TEXT,
                 error_code TEXT,
                 error_message TEXT,
+                folder_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS source_folders (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL,
+                parent_id TEXT,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE,
+                FOREIGN KEY(parent_id) REFERENCES source_folders(id) ON DELETE CASCADE,
+                UNIQUE(space_id, parent_id, name)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_source_folders_parent
+                ON source_folders(space_id, parent_id);
+
+            CREATE TABLE IF NOT EXISTS learning_preferences (
+                space_id TEXT PRIMARY KEY,
+                onboarding_completed INTEGER NOT NULL DEFAULT 0,
+                tone TEXT NOT NULL DEFAULT '友好、直接',
+                explanation_depth TEXT NOT NULL DEFAULT '循序渐进',
+                teaching_approach TEXT NOT NULL DEFAULT '先理解再练习',
+                interaction_style TEXT NOT NULL DEFAULT '启发式追问',
+                learner_level TEXT NOT NULL DEFAULT '',
+                custom_instructions TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(space_id) REFERENCES spaces(id) ON DELETE CASCADE
@@ -382,6 +412,7 @@ def init_db() -> None:
         _ensure_column(conn, "sources", "version_id", "TEXT")
         _ensure_column(conn, "sources", "chunk_count", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "sources", "indexed_at", "TEXT")
+        _ensure_column(conn, "sources", "folder_id", "TEXT")
         _ensure_column(conn, "citations", "source_type", "TEXT NOT NULL DEFAULT 'source'")
 
 

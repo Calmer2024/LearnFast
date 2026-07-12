@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowClockwise,
+  CaretRight,
   File as FileIcon,
   FileArrowUp,
   FileAudio,
@@ -16,9 +17,12 @@ import {
   FileVideo,
   FileXls,
   FileZip,
+  Folder,
+  FolderOpen,
   GlobeSimple,
   LinkSimple,
   MagnifyingGlass,
+  PencilSimple,
   Power,
   Trash,
   UploadSimple,
@@ -32,7 +36,7 @@ import { useAppDialog } from "../../components/AppDialog";
 import { MarkdownRenderer } from "../../components/MarkdownRenderer";
 import { StatusBadge } from "../../components/StatusBadge";
 import { api } from "../../lib/api";
-import type { Source, SourceChunk } from "../../lib/types";
+import type { Source, SourceChunk, SourceFolder } from "../../lib/types";
 
 type SourceDetailView = "markdown" | "chunks";
 type SourceKind =
@@ -75,6 +79,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const dialog = useAppDialog();
   const [routeParams, setRouteParams] = useSearchParams();
   const [sources, setSources] = useState<Source[]>([]);
+  const [folders, setFolders] = useState<SourceFolder[]>([]);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [markdown, setMarkdown] = useState<string>("");
@@ -84,6 +90,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const [fileSummary, setFileSummary] = useState("未选择文件");
   const [fileDragActive, setFileDragActive] = useState(false);
   const [boardDragActive, setBoardDragActive] = useState(false);
+  const [draggedSourceId, setDraggedSourceId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,8 +99,8 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
   const detailView: SourceDetailView = routeParams.get("view") === "chunks" ? "chunks" : "markdown";
 
   const loadSources = async () => {
-    const rows = await api.listSources(spaceId);
-    setSources(rows);
+    const [rows, folderRows] = await Promise.all([api.listSources(spaceId), api.listSourceFolders(spaceId)]);
+    setSources(rows); setFolders(folderRows);
   };
 
   useEffect(() => {
@@ -129,15 +137,62 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
 
   const visibleSources = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return sources;
-    return sources.filter((source) =>
+    const scoped = sources.filter((source) => (source.folder_id ?? null) === activeFolderId);
+    if (!query) return scoped;
+    return scoped.filter((source) =>
       [source.title, source.type, source.origin, source.status, source.version_id]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(query),
     );
-  }, [search, sources]);
+  }, [search, sources, activeFolderId]);
+
+  const createFolder = async () => {
+    const name = await dialog.prompt({ title: "新建目录", inputLabel: "目录名称", placeholder: "例如：第一章 基础概念", confirmLabel: "创建" });
+    if (!name?.trim()) return;
+    await api.createSourceFolder(spaceId, { name: name.trim(), parent_id: activeFolderId });
+    await loadSources();
+  };
+  const renameFolder = async (folder: SourceFolder) => {
+    const name = await dialog.prompt({ title: "重命名目录", inputLabel: "目录名称", defaultValue: folder.name, confirmLabel: "保存" });
+    if (!name?.trim()) return;
+    await api.updateSourceFolder(spaceId, folder.id, { name: name.trim() });
+    await loadSources();
+  };
+  const deleteFolder = async (folder: SourceFolder) => {
+    const confirmed = await dialog.confirm({ title: "删除此目录？", body: "目录中的资料和子目录会移到根目录，不会删除资料。", confirmLabel: "删除目录", variant: "danger" });
+    if (!confirmed) return;
+    await api.deleteSourceFolder(spaceId, folder.id);
+    if (activeFolderId === folder.id) setActiveFolderId(folder.parent_id ?? null);
+    await loadSources();
+  };
+  const currentFolders = useMemo(() => folders.filter((folder) => (folder.parent_id ?? null) === activeFolderId), [folders, activeFolderId]);
+  const breadcrumbs = useMemo(() => {
+    const path: SourceFolder[] = [];
+    let cursor = activeFolderId ? folders.find((folder) => folder.id === activeFolderId) : undefined;
+    while (cursor) {
+      path.unshift(cursor);
+      cursor = cursor.parent_id ? folders.find((folder) => folder.id === cursor?.parent_id) : undefined;
+    }
+    return path;
+  }, [activeFolderId, folders]);
+  const moveSource = async (sourceId: string, folderId: string | null) => {
+    const source = sources.find((item) => item.id === sourceId);
+    if (!source || (source.folder_id ?? null) === folderId) return;
+    await api.updateSource(spaceId, sourceId, { folder_id: folderId });
+    setMessage(`《${source.title}》已移动。`);
+    await loadSources();
+  };
+  const acceptSourceDrop = (event: DragEvent<HTMLElement>, folderId: string | null) => {
+    const sourceId = event.dataTransfer.getData("application/x-learnfast-source") || draggedSourceId;
+    if (!sourceId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDragOverFolderId(null);
+    setDraggedSourceId(null);
+    void moveSource(sourceId, folderId);
+  };
 
   const selected = sources.find((source) => source.id === selectedSourceId) ?? null;
 
@@ -162,7 +217,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
     setError(null);
     setMessage(null);
     try {
-      await api.uploadSources(spaceId, files);
+      await api.uploadSources(spaceId, files, activeFolderId);
       setMessage(`${files.length} 个资料文件已加入处理队列。`);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -471,6 +526,16 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
               </label>
               <span className="source-count">{visibleSources.length} / {sources.length} 个资料</span>
             </div>
+            <nav className="source-breadcrumbs" aria-label="资料路径">
+              <button className={activeFolderId === null ? "current" : ""} onClick={() => setActiveFolderId(null)} onDragOver={(event) => { if (draggedSourceId) event.preventDefault(); }} onDrop={(event) => acceptSourceDrop(event, null)} type="button"><FolderOpen size={14} />资料库</button>
+              {breadcrumbs.map((folder, index) => (
+                <span key={folder.id}><CaretRight size={11} /><button className={index === breadcrumbs.length - 1 ? "current" : ""} onClick={() => setActiveFolderId(folder.id)} onDragOver={(event) => { if (draggedSourceId) event.preventDefault(); }} onDrop={(event) => acceptSourceDrop(event, folder.id)} type="button">{folder.name}</button></span>
+              ))}
+            </nav>
+            <div className="source-library-actions">
+              <button className="button secondary" onClick={createFolder} type="button"><Folder size={16} />新建目录</button>
+              {activeFolderId && <button className="button ghost source-parent-button" onClick={() => setActiveFolderId(folders.find((folder) => folder.id === activeFolderId)?.parent_id ?? null)} type="button"><ArrowLeft size={15} />返回上一级</button>}
+            </div>
 
             <div
               className={`source-card-grid source-drop-surface ${boardDragActive ? "dragging" : ""}`.trim()}
@@ -486,6 +551,13 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                   <span>多个文件会一起上传、转换成 Markdown 并写入索引。</span>
                 </div>
               )}
+              {currentFolders.map((folder) => (
+                <article className={`source-card source-folder-card ${dragOverFolderId === folder.id ? "drop-target" : ""}`.trim()} key={folder.id} onClick={() => setActiveFolderId(folder.id)} onDragEnter={(event) => { if (draggedSourceId) { event.preventDefault(); setDragOverFolderId(folder.id); } }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverFolderId(null); }} onDragOver={(event) => { if (draggedSourceId) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => acceptSourceDrop(event, folder.id)} onKeyDown={(event) => { if (event.key === "Enter") setActiveFolderId(folder.id); }} role="button" tabIndex={0}>
+                  <div className="source-folder-visual" aria-hidden="true"><span /></div>
+                  <div className="source-card-body"><h3>{folder.name}</h3><p>{sources.filter((source) => source.folder_id === folder.id).length} 个资料</p></div>
+                  <div className="source-folder-actions" onClick={(event) => event.stopPropagation()}><button aria-label={`重命名目录：${folder.name}`} className="icon-button" onClick={() => renameFolder(folder)} type="button"><PencilSimple size={15} /></button><button aria-label={`删除目录：${folder.name}`} className="icon-button danger-text" onClick={() => deleteFolder(folder)} type="button"><Trash size={15} /></button></div>
+                </article>
+              ))}
               {visibleSources.map((source) => {
                 const kind = sourceKind(source);
                 const icon = sourceIconConfig(kind);
@@ -493,8 +565,11 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                 return (
                   <article
                     aria-label={`打开资料预览：${source.title}`}
-                    className={`source-card ${source.enabled ? "" : "disabled"}`.trim()}
+                    className={`source-card source-file-card ${source.enabled ? "" : "disabled"} ${draggedSourceId === source.id ? "dragging-source" : ""}`.trim()}
+                    draggable
                     key={source.id}
+                    onDragEnd={() => { setDraggedSourceId(null); setDragOverFolderId(null); }}
+                    onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-learnfast-source", source.id); setDraggedSourceId(source.id); }}
                     onClick={() => openSource(source)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -598,6 +673,7 @@ export function SourcesSection({ spaceId }: { spaceId: string }) {
                 onDragOver={handleFileDragOver}
                 onDrop={handleFileDrop}
               >
+                <p className="upload-location"><FolderOpen size={15} />保存到：资料库{breadcrumbs.map((folder) => ` / ${folder.name}`).join("")}</p>
                 <label>
                   上传文件
                   <input

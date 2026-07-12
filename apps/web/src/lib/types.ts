@@ -38,6 +38,20 @@ export type Source = {
   created_at: string;
   updated_at: string;
   job_id?: string;
+  folder_id?: string | null;
+};
+
+export type SourceFolder = { id: string; space_id: string; parent_id?: string | null; name: string };
+
+export type LearningPreferences = {
+  space_id: string;
+  onboarding_completed: boolean;
+  tone: string;
+  explanation_depth: string;
+  teaching_approach: string;
+  interaction_style: string;
+  learner_level: string;
+  custom_instructions: string;
 };
 
 export type SourceChunk = {

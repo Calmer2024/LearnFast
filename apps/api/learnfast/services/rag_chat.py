@@ -106,6 +106,7 @@ def stream_answer(
     citations: list[CitationCandidate],
     trace: RetrievalTrace,
     memory_context: list[dict] | None = None,
+    learning_preferences: dict | None = None,
 ) -> Iterator[str]:
     memory_context = memory_context or []
     config = _load_chat_model_config()
@@ -113,10 +114,10 @@ def stream_answer(
         yield _insufficient_answer(trace)
         return
     if not config:
-        yield from _stream_local_answer(question, citations, memory_context)
+        yield from _stream_local_answer(question, citations, memory_context, learning_preferences=learning_preferences)
         return
     try:
-        yield from _stream_remote_answer(config, question, citations, memory_context)
+        yield from _stream_remote_answer(config, question, citations, memory_context, learning_preferences)
     except ChatModelError as exc:
         fallback = (
             f"聊天模型调用失败：{exc}。\n\n"
@@ -128,6 +129,7 @@ def stream_answer(
             citations,
             memory_context,
             include_model_notice=False,
+            learning_preferences=learning_preferences,
         )
 
 
@@ -265,6 +267,7 @@ def _stream_remote_answer(
     question: str,
     citations: list[CitationCandidate],
     memory_context: list[dict],
+    learning_preferences: dict | None,
 ) -> Iterator[str]:
     messages = [
         {
@@ -278,7 +281,7 @@ def _stream_remote_answer(
         },
         {
             "role": "user",
-            "content": _remote_prompt(question, citations, memory_context),
+            "content": _remote_prompt(question, citations, memory_context) + _preferences_prompt(learning_preferences),
         },
     ]
     try:
@@ -347,6 +350,7 @@ def _stream_local_answer(
     citations: list[CitationCandidate],
     memory_context: list[dict] | None = None,
     include_model_notice: bool = True,
+    learning_preferences: dict | None = None,
 ) -> Iterator[str]:
     memory_context = memory_context or []
     paragraphs: list[str] = []
@@ -355,6 +359,11 @@ def _stream_local_answer(
             "未配置可用聊天模型，下面是基于检索片段生成的本地摘录式回答。"
         )
     paragraphs.append(f"针对“{question}”，当前资料中最相关的信息如下：")
+    if learning_preferences and learning_preferences.get("onboarding_completed"):
+        paragraphs.append(
+            f"回答方式：{learning_preferences.get('tone')}；{learning_preferences.get('explanation_depth')}；"
+            f"教学倾向：{learning_preferences.get('teaching_approach')}。"
+        )
     if memory_context:
         memory_lines = [
             f"- {_memory_layer_label(item.get('layer'))}：{item.get('content')}"
@@ -400,6 +409,18 @@ def _memory_context_prompt(memory_context: list[dict]) -> str:
             f"[M{index}] {_memory_layer_label(item.get('layer'))}：{item.get('content')}"
         )
     return "\n".join(lines)
+
+
+def _preferences_prompt(preferences: dict | None) -> str:
+    if not preferences or not preferences.get("onboarding_completed"):
+        return ""
+    return (
+        "\n\n用户已确认的教学偏好："
+        f"语气={preferences.get('tone')}；解释深度={preferences.get('explanation_depth')}；"
+        f"教学倾向={preferences.get('teaching_approach')}；互动方式={preferences.get('interaction_style')}；"
+        f"当前基础={preferences.get('learner_level') or '未说明'}；"
+        f"补充要求={preferences.get('custom_instructions') or '无'}。请遵循这些偏好，但不得降低引用要求。"
+    )
 
 
 def _memory_layer_label(layer: str | None) -> str:

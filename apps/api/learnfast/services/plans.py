@@ -131,6 +131,7 @@ def generate_plan(
         for memory in list_memories(space_id, layer="learning_ability")
         if memory["status"] == "active"
     ]
+    preferences = _learning_preferences(space_id)
     normalized_goal = _compact(goal or space.get("goal") or "", 1000)
     if not normalized_goal:
         normalized_goal = "建立当前主题的基础理解，并形成可复习的笔记和问答记录。"
@@ -144,13 +145,19 @@ def generate_plan(
         "source_count": len(ready_sources),
         "note_count": len(notes),
         "weakness_count": len(weakness_memories),
-        "generation_mode": "local_deterministic_mvp",
+        "generation_mode": "adaptive_local_content_v1",
+        "learning_preferences": {
+            "teaching_approach": preferences.get("teaching_approach"),
+            "interaction_style": preferences.get("interaction_style"),
+            "learner_level": preferences.get("learner_level"),
+        },
     }
     tasks = _generated_tasks(
         goal=normalized_goal,
         ready_sources=ready_sources,
         notes=notes,
         weakness_memories=weakness_memories,
+        preferences=preferences,
         deadline=deadline,
     )
     rationale = _plan_rationale(ready_sources, notes, weakness_memories)
@@ -700,6 +707,7 @@ def _generated_tasks(
     ready_sources: list[dict],
     notes: list[dict],
     weakness_memories: list[dict],
+    preferences: dict,
     deadline: str | None,
 ) -> list[dict]:
     start = date.today()
@@ -716,18 +724,23 @@ def _generated_tasks(
     ]
     if ready_sources:
         for index, source in enumerate(ready_sources[:3], start=1):
+            topics = source.get("topics") or []
+            focus = "、".join(topics[:3])
             tasks.append(
                 {
-                    "title": f"精读资料：{source['title']}",
-                    "description": "阅读资料并标记不理解的概念、例子和可复习段落。",
+                    "title": f"学习{f'“{topics[0]}”' if topics else '资料'}：{source['title']}",
+                    "description": (
+                        f"围绕 {focus} 建立概念联系，并标记不理解的例子和段落。"
+                        if focus else "阅读资料并标记不理解的概念、例子和可复习段落。"
+                    ),
                     "task_type": "study",
                     "priority": "high" if index == 1 else "medium",
                     "due_date": due_dates[min(index, len(due_dates) - 1)],
                     "source_ids": [source["id"]],
-                    "recommended_reason": "基于当前空间已索引资料生成，优先把资料转化为可问答上下文。",
+                    "recommended_reason": f"根据资料正文识别出的重点{f'（{focus}）' if focus else ''}生成，而非固定模板。",
                 }
             )
-        review_topic = ready_sources[0]["title"]
+        review_topic = (ready_sources[0].get("topics") or [ready_sources[0]["title"]])[0]
         tasks.append(
             {
                 "title": f"复习问答：解释《{review_topic}》的核心概念",
@@ -786,6 +799,10 @@ def _generated_tasks(
                 "recommended_reason": "推荐原因：长期记忆中记录了薄弱点，需要主动复查。",
             }
         )
+    if preferences.get("onboarding_completed"):
+        approach = preferences.get("teaching_approach") or "先理解再练习"
+        for task in tasks:
+            task["recommended_reason"] = f"{task.get('recommended_reason', '')} 教学倾向：{approach}。".strip()
     tasks.append(
         {
             "title": "完成一次学习复盘",
@@ -1024,7 +1041,39 @@ def _ready_sources(space_id: str) -> list[dict]:
             """,
             (space_id,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    sources = [dict(row) for row in rows]
+    for source in sources:
+        source["topics"] = _source_topics(source["id"])
+    return sources
+
+
+def _source_topics(source_id: str) -> list[str]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT heading_path_json, text
+            FROM source_chunks
+            WHERE source_id = ?
+            ORDER BY ordinal ASC
+            LIMIT 24
+            """,
+            (source_id,),
+        ).fetchall()
+    candidates: list[str] = []
+    for row in rows:
+        headings = json.loads(row["heading_path_json"] or "[]")
+        for heading in reversed(headings):
+            value = _compact(str(heading), 42)
+            if value and value not in candidates:
+                candidates.append(value)
+        if not headings:
+            first_line = (row["text"] or "").strip().splitlines()[0] if row["text"] else ""
+            value = _compact(first_line.lstrip("#*- "), 42)
+            if len(value) >= 3 and value not in candidates:
+                candidates.append(value)
+        if len(candidates) >= 6:
+            break
+    return candidates[:6]
 
 
 def _recent_notes(space_id: str) -> list[dict]:
@@ -1040,6 +1089,14 @@ def _recent_notes(space_id: str) -> list[dict]:
             (space_id,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _learning_preferences(space_id: str) -> dict:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM learning_preferences WHERE space_id = ?", (space_id,)
+        ).fetchone()
+    return dict(row) if row else {"onboarding_completed": 0}
 
 
 def _plan_title(goal: str) -> str:

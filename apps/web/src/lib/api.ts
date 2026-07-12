@@ -3,6 +3,7 @@ import type {
   ChatStreamEvent,
   Health,
   LearningPlan,
+  LearningPreferences,
   LearningReport,
   MemoryCandidate,
   MemoryItem,
@@ -18,6 +19,7 @@ import type {
   PlanTaskType,
   SearchResult,
   Source,
+  SourceFolder,
   SourceChunk,
   Space,
   SystemLog,
@@ -90,9 +92,17 @@ export const api = {
     }),
 
   listSources: (spaceId: string) => request<Source[]>(`/spaces/${spaceId}/sources`),
-  uploadSources: (spaceId: string, files: FileList | File[]) => {
+  listSourceFolders: (spaceId: string) => request<SourceFolder[]>(`/spaces/${spaceId}/source-folders`),
+  createSourceFolder: (spaceId: string, payload: { name: string; parent_id?: string | null }) =>
+    request<SourceFolder>(`/spaces/${spaceId}/source-folders`, { method: "POST", body: JSON.stringify(payload) }),
+  updateSourceFolder: (spaceId: string, folderId: string, payload: { name?: string; parent_id?: string | null }) =>
+    request<SourceFolder>(`/spaces/${spaceId}/source-folders/${folderId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteSourceFolder: (spaceId: string, folderId: string) =>
+    request<{ deleted: boolean; id: string }>(`/spaces/${spaceId}/source-folders/${folderId}`, { method: "DELETE" }),
+  uploadSources: (spaceId: string, files: FileList | File[], folderId?: string | null) => {
     const formData = new FormData();
     Array.from(files).forEach((file) => formData.append("files", file));
+    if (folderId) formData.append("folder_id", folderId);
     return request<Source[]>(`/spaces/${spaceId}/sources/files`, {
       method: "POST",
       body: formData,
@@ -103,7 +113,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateSource: (spaceId: string, sourceId: string, payload: { title?: string; enabled?: boolean }) =>
+  updateSource: (spaceId: string, sourceId: string, payload: { title?: string; enabled?: boolean; folder_id?: string | null }) =>
     request<Source>(`/spaces/${spaceId}/sources/${sourceId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -120,6 +130,13 @@ export const api = {
     request<{ source_id: string; title: string; markdown: string }>(
       `/spaces/${spaceId}/sources/${sourceId}/markdown`,
     ),
+  getLearningPreferences: (spaceId: string) =>
+    request<LearningPreferences>(`/spaces/${spaceId}/learning-preferences`),
+  updateLearningPreferences: (spaceId: string, payload: Omit<LearningPreferences, "space_id">) =>
+    request<LearningPreferences>(`/spaces/${spaceId}/learning-preferences`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   getChunks: (spaceId: string, sourceId: string) =>
     request<SourceChunk[]>(`/spaces/${spaceId}/sources/${sourceId}/chunks`),
   search: (spaceId: string, query: string) =>
