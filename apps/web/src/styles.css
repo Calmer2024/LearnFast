@@ -1731,14 +1731,7 @@ textarea:focus {
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  transition:
-    transform 260ms ease,
-    max-width 260ms ease;
-  will-change: transform;
-}
-
-.learning-layout.context-collapsed .chat-pane {
-  transform: scale(1.002);
+  transition: max-width 260ms ease;
 }
 
 .context-panel {
